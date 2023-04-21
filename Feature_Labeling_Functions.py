@@ -134,11 +134,14 @@ def disp_image(window, values, fnames, location):
     data = array_to_data(im_array)
     window["-GRAPH-"].draw_image(data=data, location=(0,var.height))
 
+    ## Open .csv file to write feature coordinates to
+    csv_file = open(os.path.splitext(filename)[0]+".csv", "a+")
+
     with open(filename, 'rb') as f:
         im_bytes = f.read()
     pil_image = Image.open(io.BytesIO(im_bytes))
     
-    return im, pil_image, filename, values["-FILE LIST-"][0]
+    return im, pil_image, filename, csv_file
 
 
 

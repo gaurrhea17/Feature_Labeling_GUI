@@ -22,6 +22,10 @@ import cv2 as cv
 import Feature_Labeling_Functions as func
 import Feature_Labeling_Variables as var
 
+import sys
+sys.path.append(r'C:\Users\gaurr\OneDrive - TRIUMF\Super-K\Reconstruction\PhotogrammetryAnalysis-master')
+import SK_ring-relabelling-secondattempt as recon
+
 #%% Defining window objects and layout
 
 # sg.theme_previewer() ## Use to see all the colour themes available
@@ -63,13 +67,13 @@ mov_col = [[sg.T('Choose what you want to do:', enable_events=True)],
            ]
 
 column = [[sg.Graph(canvas_size = (var.width, var.height), graph_bottom_left = (0,0), 
-graph_top_right = (var.width, var.height), key = "-GRAPH-", change_submits = True, ## allows mouse click events
+graph_top_right = (var.width, var.height), key = "-GRAPH-", ## can include "change_submits = True"
 background_color = 'white', enable_events = True, drag_submits = True, right_click_menu=[[],['Erase Item',]])]]
 
 image_viewer_col_2 = [
     [sg.Text("Choose an image from list on the left: ")],
     [sg.Text(size=(40,1), key="-TOUT-")],
-    [sg.Column(column, size=(1000, 750), scrollable = True, key = "-COL-")],
+    [sg.Column(column, size=(500, 375), scrollable = True, key = "-COL-")],
     [sg.Text(key="-INFO-", size=(60,1))],
     ]
 
@@ -124,19 +128,19 @@ def main():
             if len(values["-FOLDER-"]) == 0 :
                 select_folder = sg.popup_ok("Please select a folder first.")
             elif len(values["-FOLDER-"]) != 0:
-                image, pil_image, filename, value_file = func.disp_image(window, values, fnames, location=0)
+                image, pil_image, filename, csv_file = func.disp_image(window, values, fnames, location=0)
                 window.refresh()
                 window["-COL-"].contents_changed()
                 if filename not in coord_dict["Img"]:
                     i=1 ## counter for feature number
         if event == "-NEXT-":
-            image, pil_image, filename, value_file = func.disp_image(window, values, fnames, location=1)
+            image, pil_image, filename, csv_file = func.disp_image(window, values, fnames, location=1)
             window.refresh()
             window["-COL-"].contents_changed()
             if filename not in coord_dict["Img"]:
                 i=1 ## counter for feature number
         if event == "-PREV-":
-            image, pil_image, filename, value_file = func.disp_image(window, values, fnames, location=-1)
+            image, pil_image, filename, csv_file = func.disp_image(window, values, fnames, location=-1)
             window.refresh()
             window["-COL-"].contents_changed()
             if filename not in coord_dict["Img"]:
@@ -146,7 +150,7 @@ def main():
             
         if event in ('-MOVE-', '-MOVEALL-'):
             graph.set_cursor(cursor='fleur')
-        elif not event.startswith('-COL-'):
+        elif not event.startswith('-GRAPH-'):
             graph.set_cursor(cursor='left_ptr') 
         
         if event == "-GRAPH-":
@@ -154,7 +158,8 @@ def main():
             if not dragging:
                 start_pt = (x, y)
                 dragging = True
-                drag_figures = graph.get_figures_at_location((x,y))
+                drag_figures = graph.get_figures_at_location((x,y))[-1]
+                # print("Drag figures info", drag_figures, len(drag_figures))
                 lastxy = x,y
             else:
                 end_pt = (x,y)
@@ -166,9 +171,11 @@ def main():
             
             if None not in (start_pt, end_pt):
                 if values['-MOVE-']:
-                    for fig in drag_figures:
-                        graph.move_figure(fig, delta_x, delta_y)
-                        graph.update()
+                    # for fig in drag_figures:
+                    #     graph.move_figure(fig, delta_x, delta_y)
+                    #     graph.update()
+                    graph.move_figure(drag_figures, delta_x, delta_y)
+                    graph.update()
                 # elif values['-RECT-']:
                 #     prior_rect = graph.draw_rectangle(start_pt, end_pt,fill_color='green', line_color='red')
                 # elif values['-CIRCLE-']:
@@ -180,18 +187,18 @@ def main():
                 elif values['-BOLT_POINT-']:
                     graph.draw_point((x,y), color = 'yellow', size =8)
                 elif values['-ERASE-']:
-                    for figure in drag_figures:
-                        graph.delete_figure(figure)
+                    for fig in drag_figures:
+                        graph.delete_figure(fig)
                 elif values['-CLEAR-']:
                     graph.erase()
                 elif values['-MOVEALL-']:
                     graph.move(delta_x, delta_y)
-                elif values['-FRONT-']:
-                    for fig in drag_figures:
-                        graph.bring_figure_to_front(fig)
-                elif values['-BACK-']:
-                    for fig in drag_figures:
-                        graph.send_figure_to_back(fig)
+                # elif values['-FRONT-']:
+                #     for fig in drag_figures:
+                #         graph.bring_figure_to_front(fig)
+                # elif values['-BACK-']:
+                #     for fig in drag_figures:
+                #         graph.send_figure_to_back(fig)
             window["-INFO-"].update(value=f"Mouse {values['-GRAPH-']}")
         
         elif values["-PMT_POINT-"] and event.endswith('+UP'):  # The drawing has ended because mouse up
@@ -292,8 +299,8 @@ def main():
             print(values["-OVERLAY-"])
             x_overlay, y_overlay, pmt_id_overlay = func.overlay_pts(values["-OVERLAY-"])
             for i in range(len(x_overlay)):
-                print(x_overlay[i], y_overlay[i])
-                # graph.draw_point((x_overlay[i], y_overlay[i]), size=8)
+                # print(x_overlay[i], y_overlay[i])
+                graph.draw_point((int(x_overlay[i]), int(y_overlay[i])), size=8)
         
         elif event == 'Copy':
             func.copy(window)
@@ -314,7 +321,7 @@ def main():
                 
                 ## draw the associated points on the image again? 
                 for i in range(len(coord_dict)):
-                    graph.draw_point((coord_dict["X"][i], coord_dict["Y"][i]), size=8)
+                    graph.draw_point((coord_dict["X"][i], coord_dict["Y"][i]), color = 'red', size=8)
                 
     window.close() ## For when the user presses the Exit button
     
@@ -339,52 +346,6 @@ print(coord_dict)
 # cv.namedWindow(img_name)
 # cv.setMouseCallback(img_name, select_feature)
  
- 
-# ## ======= Annotating function (CURRENTLY NOT IN USE) ================
-# def draw_feature(event, values, window, dragging, start_pt, end_pt, prior_rect):
-    
-#     x, y = values["-GRAPH-"]
-#     if not dragging:
-#         start_pt = (x, y)
-#         dragging = True
-#         drag_figures = graph.get_figures_at_location((x,y))
-#         lastxy = x,y
-#     else:
-#         end_pt = (x,y)
-#     if prior_rect:
-#         graph.delete_figure(prior_rect)
-    
-#     delta_x, delta_y = x - lastxy[0], y - lastxy[1]
-#     lastxy = (x, y)
-    
-#     if None not in (start_pt, end_pt):
-#         if values['-MOVE-']:
-#             for fig in drag_figures:
-#                 graph.move_figure(fig, delta_x, delta_y)
-#                 graph.update()
-#         elif values['-RECT-']:
-#             prior_rect = graph.draw_rectangle(start_pt, end_pt,fill_color='green', line_color='red')
-#         elif values['-CIRCLE-']:
-#             prior_rect = graph.draw_circle(start_pt, end_pt[0]-start_pt[0], fill_color='red', line_color='green')
-#         elif values['-LINE-']:
-#             prior_rect = graph.draw_line(start_pt, end_pt, width=4)
-#         elif values['-POINT-']:
-#             graph.draw_point((x,y), size=8)
-#         elif values['-ERASE-']:
-#             for figure in drag_figures:
-#                 graph.delete_figure(figure)
-#         elif values['-CLEAR-']:
-#             graph.erase()
-#         elif values['-MOVEALL-']:
-#             graph.move(delta_x, delta_y)
-#         elif values['-FRONT-']:
-#             for fig in drag_figures:
-#                 graph.bring_figure_to_front(fig)
-#         elif values['-BACK-']:
-#             for fig in drag_figures:
-#                 graph.send_figure_to_back(fig)
-#     window["-INFO-"].update(value=f"Mouse {values['-GRAPH-']}") 
-
 
 
 # num = 1
