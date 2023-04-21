@@ -9,143 +9,26 @@ Created on Wed Mar 15 14:24:03 2023
 
 import numpy as np
 import glob
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageGrab
 import io
+import csv
+import pandas as pd
 import os.path
 import PySimpleGUI as sg
 import matplotlib
-# %matplotlib tk ## will work as a command if file as .ipy extension
-# export MPLBACKEND = TKAgg
 import matplotlib.pyplot as plt
 import cv2 as cv
-# matplotlib.use("TkAgg") ##importing matplotlib with Tkinter rather than another framework like Qt
-# from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-# from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 
-#%%
+import Feature_Labeling_Functions as func
+import Feature_Labeling_Variables as var
+
+#%% Defining window objects and layout
 
 # sg.theme_previewer() ## Use to see all the colour themes available
 sg.theme('GreenTan') ## setting window colour scheme
 
-## Converting JPG to PNG
-def jpg_to_png(folder):
-   
-    for fname in folder: ## case sensitive
-        if os.path.isfile(os.path.join(folder, fname)) and fname.lower().endswith((".JPG")):
-            print("you found a picture")    
-            # cv.imread(fname)
-            # cv.imwrite(os.path.splitext(fname)[0]+".png")
-        
-path = "C:\\Users\\gaurr\\OneDrive - TRIUMF\\Hyper-K\\Calibration\\100MEDIA_OLDDrone\\100MEDIA_OLDDrone\\"
-jpg_to_png(path)
-
-## User selected a folder; need to get images in folder
-def parse_folder(window, values):
-    folder = values["-FOLDER-"]
-    try:
-        # To get the list of files in the folder
-        file_list = os.listdir(folder)
-    except:
-        file_list = []
-    
-    fnames = [ ## filter down list of files to files ending with extension ".png" or ".gif"
-        f
-        for f in file_list
-        ## case sensitive
-        if os.path.isfile(os.path.join(folder, f)) 
-        and f.lower().endswith((".gif", ".png"))
-    ]
-    window["-FILE LIST-"].update(fnames) ## list of files updated with chosen folder's contents
-
-    return fnames
-    
-## Converting the pictures from array to data
-def array_to_data(array):
-    im = Image.fromarray(array)
-    with io.BytesIO() as output:
-        im.save(output, format="PNG")
-        data = output.getvalue()
-    return data
-    
-    
-## User selected an image to display
-def disp_image(window, values, fnames, location): 
-    
-    if location == 0:
-        filename = os.path.join(
-            values["-FOLDER-"], values["-FILE LIST-"][0]
-        )
-    
-        index = np.where(np.array(fnames) == values["-FILE LIST-"][0])[0][0]
-    
-    elif location == 1:
-        index = np.where(np.array(fnames) == value_file)[0][0]
-        filename = os.path.join(
-            values["-FOLDER-"], fnames[index+1])
-        values["-FILE LIST-"][0] = fnames[index+1]
-        
-    elif location == -1:
-        index = np.where(np.array(fnames) == value_file)[0][0]
-        filename = os.path.join(
-            values["-FOLDER-"], fnames[index-1])
-        values["-FILE LIST-"][0] = fnames[index-1]
-    
-    graph.draw_circle((200,150), 10, fill_color='black', line_color='white')
-    window["-TOUT-"].update(filename) ## update the text with the filename selected
-    # window["-IMAGE-"].update(filename=filename) ## update the image with the file selected
-    im = Image.open(filename)
-    im_array = np.array(im, dtype=np.uint8)
-    data = array_to_data(im_array)
-    graph.draw_image(data=data, location=(0,height))
-    # graph.draw_circle((200,150), 10, fill_color='black', line_color='white')
-
-    return filename, values["-FILE LIST-"][0]
-
-## Annotating function
-def draw_feature(event, values, window, dragging, start_pt, end_pt, prior_rect):
-
-    global RED
-    RED = 255,0,0
-    global BLUE
-    BLUE = 0,0,255
-    
-    x, y = values["-GRAPH-"]
-    if not dragging:
-        start_pt = (x, y)
-        dragging = True
-        drag_figures = graph.get_figures_at_location((x,y))
-        lastxy = (x,y)
-    else:
-        end_pt = (x,y)
-    if prior_rect:
-        graph.delete_figure(prior_rect)
-    
-    delta_x, delta_y = x - lastxy[0], y - lastxy[1]
-    lastxy = (x, y)
-    
-    if None not in (start_pt, end_pt):
-        if values["-MOVE-"]:
-            for fig in drag_figures:
-                graph.move_figure(fig, delta_x, delta_y)
-                graph.update()
-        elif values["-POINT-"]:
-            graph.draw_point((x,y), color = 'red', size=10)
-        elif values['-ERASE-']:
-            for figure in drag_figures:
-                graph.delete_figure(figure)
-        elif values['-CLEAR-']:
-            graph.erase()
-        elif values['-MOVEALL-']:
-            graph.move(delta_x, delta_y)
-    window["-INFO-"].update(value=f"Mouse {values['-GRAPH-']}")
-    
-
-def save_fig(img, filename):
-    path = os.path.dirname(filename)
-    base = os.path.basename(filename)
-    cv.imwrite(path+base+"_annotated.txt",img)
-    
-#%% Defining window objects and layout
+## Dictionary with necessary lists of coordinates
+coord_dict = {"Img": [], "FN": [], "ID": [], "X":[], "Y":[]}
 
 ## Top menubar options
 menu_butts = [['File', ['New', 'Open', 'Save', 'Exit', ]], ['Edit', ['Cut', 'Copy', 'Paste', 'Undo'], ],  ['Help', 'About...'], ]
@@ -164,31 +47,45 @@ file_list_col = [
     ]
 
 
-mov_col = [[sg.R("Erase item", 1, key="-ERASE-", enable_events = True)],
-           [sg.R("Erase all", 1, key="-CLEAR-", enable_events = True)],
-           [sg.R("Draw points", 1, key="-POINT-", enable_events = True)],
+mov_col = [[sg.T('Choose what you want to do:', enable_events=True)],
+           # [sg.R('Draw Rectangles', 1, key='-RECT-', enable_events=True)],
+           # [sg.R('Draw Circle', 1, key='-CIRCLE-', enable_events=True)],
+           # [sg.R('Draw Line', 1, key='-LINE-', enable_events=True)],
+           [sg.R('Draw PMT points', 1,  key='-PMT_POINT-', enable_events=True)],
+           [sg.R('Draw bolt points', 1,  key='-BOLT_POINT-', enable_events=True)],
+           [sg.R('Erase item', 1, key='-ERASE-', enable_events=True)],
+           [sg.R('Erase all', 1, key='-CLEAR-', enable_events=True)],
            [sg.R('Send to back', 1, key='-BACK-', enable_events=True)],
            [sg.R('Bring to front', 1, key='-FRONT-', enable_events=True)],
-           [sg.R("Move everything", 1, key="-MOVEALL-", enable_events=True)],
-           [sg.R("Move stuff", 1, key="-MOVE-", enable_events = True)],
+           [sg.R('Move Everything', 1, key='-MOVEALL-', enable_events=True)],
+           [sg.R('Move Stuff', 1, key='-MOVE-', enable_events=True)],
+           [sg.R('Fill in remaining labels', 1, key='-AUTO_LABEL-', enable_events=True)],
            ]
 
-## Window column 2: name of chosen image and image display
-width, height = 400, 300
+column = [[sg.Graph(canvas_size = (var.width, var.height), graph_bottom_left = (0,0), 
+graph_top_right = (var.width, var.height), key = "-GRAPH-", change_submits = True, ## allows mouse click events
+background_color = 'white', enable_events = True, drag_submits = True, right_click_menu=[[],['Erase Item',]])]]
 
 image_viewer_col_2 = [
     [sg.Text("Choose an image from list on the left: ")],
     [sg.Text(size=(40,1), key="-TOUT-")],
-    [sg.Graph(canvas_size = (width, height), graph_bottom_left = (0,0), 
-     graph_top_right = (width, height), key = "-GRAPH-", change_submits = True, ## allows mouse click events
-     background_color = 'lightblue', enable_events = True, drag_submits = True, 
-     right_click_menu=[[],['Erase Item',]]), sg.Col(mov_col, key="-COL-")],
-    [sg.Text(key="-INFO-", size=(60,1))]]
+    [sg.Column(column, size=(1000, 750), scrollable = True, key = "-COL-")],
+    [sg.Text(key="-INFO-", size=(60,1))],
+    ]
 
 post_process_col= [
+    [sg.Column(mov_col)],
     [sg.Button("Save Annotations", size = (15,1), key="-SAVE-")],
     [sg.Button("Reconstruct", size=(15,1), key="-RECON-")],
+    # [sg.Slider(range=(1,10), orientation='h', resolution=.1, default_value=1, key='-ZOOM-', enable_events=True),],
+    [sg.Button('Zoom In'), sg.Button('Zoom Out')],
+    [
+     sg.Text("Choose a file of overlay points: "),
+     sg.In(size=(15,1), enable_events =True, key="-OVERLAY-"),
+     sg.FileBrowse(),
+     ],
     ]
+
 
 ## Main function
 def main():
@@ -201,11 +98,15 @@ def main():
     window = sg.Window("Image Labeling GUI", layout, resizable=True) ## putting together the user interface
     
     location = 0
-    global value_file, graph
     
-    graph = window["-GRAPH-"]
+    graph = window["-GRAPH-"] 
+    
     dragging = False
     start_pt = end_pt = prior_rect = None
+    
+    # Initializing zoom and panning
+    zoom_level = 1.0
+    pan_position = (0,0)
 
     while True:
         event, values = window.read()
@@ -217,34 +118,118 @@ def main():
                  
         # Folder name filled in, we'll now make a list of files in the folder
         if event == "-FOLDER-": ## checking if the user has chosen a folder
-            fnames = parse_folder(window, values)
+            fnames = func.parse_folder(window, values)
                         
         elif event == "-FILE LIST-": ## User selected a file from the listbox
             if len(values["-FOLDER-"]) == 0 :
                 select_folder = sg.popup_ok("Please select a folder first.")
             elif len(values["-FOLDER-"]) != 0:
-                filename, value_file = disp_image(window, values, fnames, location=0)
+                image, pil_image, filename, value_file = func.disp_image(window, values, fnames, location=0)
+                window.refresh()
+                window["-COL-"].contents_changed()
+                if filename not in coord_dict["Img"]:
+                    i=1 ## counter for feature number
         if event == "-NEXT-":
-            filename, value_file = disp_image(window, values, fnames, location=1)
+            image, pil_image, filename, value_file = func.disp_image(window, values, fnames, location=1)
+            window.refresh()
+            window["-COL-"].contents_changed()
+            if filename not in coord_dict["Img"]:
+                i=1 ## counter for feature number
         if event == "-PREV-":
-            filename, value_file = disp_image(window, values, fnames, location=-1)
-            
-            
+            image, pil_image, filename, value_file = func.disp_image(window, values, fnames, location=-1)
+            window.refresh()
+            window["-COL-"].contents_changed()
+            if filename not in coord_dict["Img"]:
+                i=1 ## counter for feature number
+        
 ## =============== Annotation Features ========================            
             
         if event in ('-MOVE-', '-MOVEALL-'):
-            graph.set_cursor(cursor='fleur')          # not yet released method... coming soon!
-        elif not event.startswith('-GRAPH-'):
+            graph.set_cursor(cursor='fleur')
+        elif not event.startswith('-COL-'):
             graph.set_cursor(cursor='left_ptr') 
         
         if event == "-GRAPH-":
-            draw_feature(event, values, window, dragging, start_pt, end_pt, prior_rect)
+            x, y = values["-GRAPH-"]
+            if not dragging:
+                start_pt = (x, y)
+                dragging = True
+                drag_figures = graph.get_figures_at_location((x,y))
+                lastxy = x,y
+            else:
+                end_pt = (x,y)
+            if prior_rect:
+                graph.delete_figure(prior_rect)
+            
+            delta_x, delta_y = x - lastxy[0], y - lastxy[1]
+            lastxy = (x, y)
+            
+            if None not in (start_pt, end_pt):
+                if values['-MOVE-']:
+                    for fig in drag_figures:
+                        graph.move_figure(fig, delta_x, delta_y)
+                        graph.update()
+                # elif values['-RECT-']:
+                #     prior_rect = graph.draw_rectangle(start_pt, end_pt,fill_color='green', line_color='red')
+                # elif values['-CIRCLE-']:
+                #     prior_rect = graph.draw_circle(start_pt, end_pt[0]-start_pt[0], fill_color='red', line_color='green')
+                # elif values['-LINE-']:
+                #     prior_rect = graph.draw_line(start_pt, end_pt, width=4)
+                elif values['-PMT_POINT-']:
+                   graph.draw_point((x,y), color = 'red', size=8)
+                elif values['-BOLT_POINT-']:
+                    graph.draw_point((x,y), color = 'yellow', size =8)
+                elif values['-ERASE-']:
+                    for figure in drag_figures:
+                        graph.delete_figure(figure)
+                elif values['-CLEAR-']:
+                    graph.erase()
+                elif values['-MOVEALL-']:
+                    graph.move(delta_x, delta_y)
+                elif values['-FRONT-']:
+                    for fig in drag_figures:
+                        graph.bring_figure_to_front(fig)
+                elif values['-BACK-']:
+                    for fig in drag_figures:
+                        graph.send_figure_to_back(fig)
+            window["-INFO-"].update(value=f"Mouse {values['-GRAPH-']}")
         
-        elif event.endswith('+UP'):  # The drawing has ended because mouse up
-            window["-INFO-"].update(value=f"Made point at {start_pt} to {end_pt}")
-            start_pt, end_pt = None, None  # enable grabbing a new rect
+        elif values["-PMT_POINT-"] and event.endswith('+UP'):  # The drawing has ended because mouse up
+            window["-INFO-"].update(value=f"Made point at ({start_pt[0]}, {start_pt[1]})")
+            
+            coord_dict["Img"].append(filename)
+            coord_dict["FN"].append(i)
+            coord_dict["X"].append(start_pt[0])
+            coord_dict["Y"].append(start_pt[1])
+            ## == insert function to put in PMT ID
+            pmt_id = input("Please enter PMT ID.")
+            coord_dict["ID"].append(pmt_id)
+            
+            start_pt, end_pt = None, None  # enable making a new point
             dragging = False
             prior_rect = None
+            i+=1
+            j=0
+            
+        elif values["-BOLT_POINT-"] and event.endswith('+UP'):  # The drawing has ended because mouse up
+            window["-INFO-"].update(value=f"Made point at ({start_pt[0]}, {start_pt[1]})")
+            
+            coord_dict["Img"].append(filename)
+            coord_dict["FN"].append(i)
+            coord_dict["X"].append(start_pt[0])
+            coord_dict["Y"].append(start_pt[1])
+            ## == insert function to put in PMT ID
+            coord_dict["ID"].append(str(pmt_id+"-0"+str(j)))
+            
+            start_pt, end_pt = None, None  # enable making a new point
+            dragging = False
+            prior_rect = None
+            i+=1
+            j+=1
+            if j == 25:
+                j=0
+            # event == "-COL-"
+            
         elif event.endswith('+RIGHT+'):  # Righ click
             window["-INFO-"].update(value=f"Right clicked location {values['-GRAPH-']}")
         elif event.endswith('+MOTION+'):  # Righ click
@@ -254,27 +239,160 @@ def main():
                 drag_figures = graph.get_figures_at_location(values['-GRAPH-'])
                 for figure in drag_figures:
                     graph.delete_figure(figure)
-            
-        # if event == "-SAVE-":
-        #     save_fig()
+                    
+## =========================== Zooming and Panning ================================
 
+        # # Handle image zoom and pan
+        # if event == '-ZOOM-':
+        #     zoom_level = values['-ZOOM-']
+        #     if image:
+        #         zoomed_image = zoom_image(image_paths[image_index], zoom_level, pan_position)
+        #         window['image_display'].update(data=cv2.imencode('.png', zoomed_image)[1].tobytes())
+        
+        # if event == 'image_display':
+        #     if values['image_display']:
+        #         x, y = values['image_display']
+        #         if zoom_level != 1.0:
+        #             pan_position[0] += int(x / zoom_level) - int((pan_position[0] + x) / zoom_level)
+        #             pan_position[1] += int(y / zoom_level) - int((pan_position[1] + y) / zoom_level)
+        #             zoomed_image = zoom_image(image_paths[image_index], zoom_level, pan_position)
+        #             window['image_display'].update(data=cv2.imencode('.png', zoomed_image)[1].tobytes())
+        
+## either open up new CV 
+        
+        # if event == 'Zoom In':
+        #     zoom_level *= 1.2
+        #     new_width = int(pil_image.width * zoom_level)
+        #     new_height = int(pil_image.height * zoom_level)
+        #     resized_image = pil_image.resize((new_width, new_height))
+        #     photo_image = sg.tkinter.PhotoImage(resized_image)
+        #     graph.erase()
+        #     graph.draw_image(data=photo_image, location=(0, var.height))
+            
+        # if event == 'Zoom Out':
+        #     zoom_level /= 1.2
+        #     new_width = int(pil_image.width * zoom_level)
+        #     new_height = int(pil_image.height * zoom_level)
+        #     resized_image = pil_image.resize((new_width, new_height))
+        #     photo_image = sg.tkinter.PhotoImage(resized_image)
+        #     graph.erase()
+        #     graph.draw_image(data=photo_image, location=(0, var.height))
+            
+        # Pan around the image
+        # if event == '-GRAPH-':
+        #     x, y = values['-GRAPH-']
+        #     dx = x - pan_position[0]
+        #     dy = y - pan_position[1]
+        #     pan_position = (x, y)
+        #     graph.move(-dx, dy)
+
+## =========================== Overlaying known coordinates =======================        
+
+        if event == "-OVERLAY-": ## if we want to overlay known coordinates on an image
+            print(values["-OVERLAY-"])
+            x_overlay, y_overlay, pmt_id_overlay = func.overlay_pts(values["-OVERLAY-"])
+            for i in range(len(x_overlay)):
+                print(x_overlay[i], y_overlay[i])
+                # graph.draw_point((x_overlay[i], y_overlay[i]), size=8)
+        
+        elif event == 'Copy':
+            func.copy(window)
+        
+        elif event == '-SAVE-':
+            dir_name = os.path.dirname(filename)
+            base = os.path.basename(filename)
+            annotate_fname = str(dir_name)+r"/annotated_"+str(base)
+            func.save_element_as_file(graph, annotate_fname)
+            
+        elif event == 'Undo':
+            if len(coord_dict) > 0:
+                for k, v in coord_dict.items():
+                    v.pop() ## remove the last point from the dictionary of point coordinates
+                
+                ## redraw the image on the graph element
+                image, pil_image, filename, value_file = func.disp_image(window, values, fnames, location=1)
+                
+                ## draw the associated points on the image again? 
+                for i in range(len(coord_dict)):
+                    graph.draw_point((coord_dict["X"][i], coord_dict["Y"][i]), size=8)
+                
     window.close() ## For when the user presses the Exit button
     
 main()
 
+print(coord_dict)
+
+# func.write_coords_to_csv(coord_dict, 'test.csv')
 
 #%% Trying extra programs
 
- ## binding mouse click to window image element
- 
- # img = cv.imread(filename)
- # if img is None:
- #     print('Could not read image')
- # window["-IMAGE-"].bind("<Button-1>", draw_feature)
-     
- # base = os.path.basename(filename) ##filename with extension
- # img_name = os.path.splitext(base)[0] ##filename without extension
-     
- # cv.namedWindow(img_name)
- # cv.setMouseCallback(img_name, select_feature)
+## binding mouse click to window image element
 
+# img = cv.imread(filename)
+# if img is None:
+#     print('Could not read image')
+# window["-IMAGE-"].bind("<Button-1>", draw_feature)
+    
+# base = os.path.basename(filename) ##filename with extension
+# img_name = os.path.splitext(base)[0] ##filename without extension
+    
+# cv.namedWindow(img_name)
+# cv.setMouseCallback(img_name, select_feature)
+ 
+ 
+# ## ======= Annotating function (CURRENTLY NOT IN USE) ================
+# def draw_feature(event, values, window, dragging, start_pt, end_pt, prior_rect):
+    
+#     x, y = values["-GRAPH-"]
+#     if not dragging:
+#         start_pt = (x, y)
+#         dragging = True
+#         drag_figures = graph.get_figures_at_location((x,y))
+#         lastxy = x,y
+#     else:
+#         end_pt = (x,y)
+#     if prior_rect:
+#         graph.delete_figure(prior_rect)
+    
+#     delta_x, delta_y = x - lastxy[0], y - lastxy[1]
+#     lastxy = (x, y)
+    
+#     if None not in (start_pt, end_pt):
+#         if values['-MOVE-']:
+#             for fig in drag_figures:
+#                 graph.move_figure(fig, delta_x, delta_y)
+#                 graph.update()
+#         elif values['-RECT-']:
+#             prior_rect = graph.draw_rectangle(start_pt, end_pt,fill_color='green', line_color='red')
+#         elif values['-CIRCLE-']:
+#             prior_rect = graph.draw_circle(start_pt, end_pt[0]-start_pt[0], fill_color='red', line_color='green')
+#         elif values['-LINE-']:
+#             prior_rect = graph.draw_line(start_pt, end_pt, width=4)
+#         elif values['-POINT-']:
+#             graph.draw_point((x,y), size=8)
+#         elif values['-ERASE-']:
+#             for figure in drag_figures:
+#                 graph.delete_figure(figure)
+#         elif values['-CLEAR-']:
+#             graph.erase()
+#         elif values['-MOVEALL-']:
+#             graph.move(delta_x, delta_y)
+#         elif values['-FRONT-']:
+#             for fig in drag_figures:
+#                 graph.bring_figure_to_front(fig)
+#         elif values['-BACK-']:
+#             for fig in drag_figures:
+#                 graph.send_figure_to_back(fig)
+#     window["-INFO-"].update(value=f"Mouse {values['-GRAPH-']}") 
+
+
+
+# num = 1
+# for f in os.listdir(directory):
+#     if f.lower().endswith(".png"):
+#         f = os.path.join(directory, f)
+#         pic_file = f
+#         base = os.path.splitext(os.path.basename(f))[0]
+#         coords_file = os.path.dirname(f)+"/"+base+".txt"
+#         func.opencv_overlay(pic_file, coords_file, num, base)
+#         num+=1
