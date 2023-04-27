@@ -18,13 +18,14 @@ import PySimpleGUI as sg
 import matplotlib
 import matplotlib.pyplot as plt
 import cv2 as cv
+import ast
 
 import Feature_Labeling_Functions as func
 import Feature_Labeling_Variables as var
 
 import sys
 sys.path.append(r'C:\Users\gaurr\OneDrive - TRIUMF\Super-K\Reconstruction\PhotogrammetryAnalysis-master')
-import SK_ring-relabelling-secondattempt as recon
+# import SK_ring-relabelling-secondattempt as recon
 
 #%% Defining window objects and layout
 
@@ -35,7 +36,7 @@ sg.theme('GreenTan') ## setting window colour scheme
 coord_dict = {"Img": [], "FN": [], "ID": [], "X":[], "Y":[]}
 
 ## Top menubar options
-menu_butts = [['File', ['New', 'Open', 'Save', 'Exit', ]], ['Edit', ['Cut', 'Copy', 'Paste', 'Undo'], ],  ['Help', 'About...'], ]
+menu_butts = [['File', ['New', 'Open', 'Save', 'Exit', ]], ['Edit', ['Copy', '&Undo point', 'Resize Image', 'Change Canvas Size'], ],  ['Help', 'About...'], ]
 menubar = [[sg.Menu(menu_butts)],]
 
 ## Window column 1: list of files in chosen folder
@@ -68,13 +69,13 @@ mov_col = [[sg.T('Choose what you want to do:', enable_events=True)],
 
 column = [[sg.Graph(canvas_size = (var.width, var.height), graph_bottom_left = (0,0), 
 graph_top_right = (var.width, var.height), key = "-GRAPH-", ## can include "change_submits = True"
-background_color = 'white', enable_events = True, drag_submits = True, right_click_menu=[[],['Erase Item',]])]]
+background_color = 'white', expand_x =True, expand_y = True, enable_events = True, drag_submits = True, right_click_menu=[[],['Erase Item',]])]]
 
 image_viewer_col_2 = [
     [sg.Text("Choose an image from list on the left: ")],
     [sg.Text(size=(40,1), key="-TOUT-")],
-    [sg.Column(column, size=(500, 375), scrollable = True, key = "-COL-")],
-    [sg.Text(key="-INFO-", size=(60,1))],
+    [sg.Column(column, size=(var.column_height, var.column_width), scrollable = True, key = "-COL-")],
+    [sg.Text(key="-INFO-", size=(90,1))],
     ]
 
 post_process_col= [
@@ -104,14 +105,11 @@ def main():
     location = 0
     
     graph = window["-GRAPH-"] 
-    
+
     dragging = False
     start_pt = end_pt = prior_rect = None
+    ids = None ## used to specify which figure on sg.Graph to delete
     
-    # Initializing zoom and panning
-    zoom_level = 1.0
-    pan_position = (0,0)
-
     while True:
         event, values = window.read()
         ## 'event' is the key string of whichever element user interacts with
@@ -125,22 +123,37 @@ def main():
             fnames = func.parse_folder(window, values)
                         
         elif event == "-FILE LIST-": ## User selected a file from the listbox
-            if len(values["-FOLDER-"]) == 0 :
+            
+            if len(values["-FOLDER-"]) == 0 : ## If user selected listbox before browsing folders
                 select_folder = sg.popup_ok("Please select a folder first.")
+            
+            
             elif len(values["-FOLDER-"]) != 0:
-                image, pil_image, filename, csv_file = func.disp_image(window, values, fnames, location=0)
+                
+                if ids is not None:
+                    graph.delete_figure(ids) ## delete the figure on the canvas if displaying a new one
+                
+                image, pil_image, filename, csv_file, ids = func.disp_image(window, values, fnames, location=0)
                 window.refresh()
                 window["-COL-"].contents_changed()
                 if filename not in coord_dict["Img"]:
                     i=1 ## counter for feature number
         if event == "-NEXT-":
-            image, pil_image, filename, csv_file = func.disp_image(window, values, fnames, location=1)
+            
+            if ids is not None:
+                graph.delete_figure(ids) ## delete the figure on the canvas if displaying a new one
+                
+            image, pil_image, filename, csv_file, ids = func.disp_image(window, values, fnames, location=1)
             window.refresh()
             window["-COL-"].contents_changed()
             if filename not in coord_dict["Img"]:
                 i=1 ## counter for feature number
         if event == "-PREV-":
-            image, pil_image, filename, csv_file = func.disp_image(window, values, fnames, location=-1)
+            
+            if ids is not None:
+                graph.delete_figure(ids) ## delete the figure on the canvas if displaying a new one
+            
+            image, pil_image, filename, csv_file, ids = func.disp_image(window, values, fnames, location=-1)
             window.refresh()
             window["-COL-"].contents_changed()
             if filename not in coord_dict["Img"]:
@@ -158,24 +171,26 @@ def main():
             if not dragging:
                 start_pt = (x, y)
                 dragging = True
-                drag_figures = graph.get_figures_at_location((x,y))[-1]
-                # print("Drag figures info", drag_figures, len(drag_figures))
+                drag_figures = graph.get_figures_at_location((x,y))
+
+                print("Drag figures info", drag_figures, len(drag_figures))
                 lastxy = x,y
             else:
                 end_pt = (x,y)
             if prior_rect:
                 graph.delete_figure(prior_rect)
-            
+                
             delta_x, delta_y = x - lastxy[0], y - lastxy[1]
             lastxy = (x, y)
             
             if None not in (start_pt, end_pt):
                 if values['-MOVE-']:
-                    # for fig in drag_figures:
-                    #     graph.move_figure(fig, delta_x, delta_y)
-                    #     graph.update()
-                    graph.move_figure(drag_figures, delta_x, delta_y)
-                    graph.update()
+                    if len(drag_figures)>1: ## removing the background image from the tuple of objects that can be dragged
+                        drag_figures = drag_figures[1:]
+                        print(drag_figures)
+                    for fig in drag_figures:
+                        graph.move_figure(fig, delta_x, delta_y)
+                        graph.update()
                 # elif values['-RECT-']:
                 #     prior_rect = graph.draw_rectangle(start_pt, end_pt,fill_color='green', line_color='red')
                 # elif values['-CIRCLE-']:
@@ -193,105 +208,53 @@ def main():
                     graph.erase()
                 elif values['-MOVEALL-']:
                     graph.move(delta_x, delta_y)
-                # elif values['-FRONT-']:
-                #     for fig in drag_figures:
-                #         graph.bring_figure_to_front(fig)
-                # elif values['-BACK-']:
-                #     for fig in drag_figures:
-                #         graph.send_figure_to_back(fig)
+                elif values['-FRONT-']:
+                    for fig in drag_figures:
+                        graph.bring_figure_to_front(fig)
+                elif values['-BACK-']:
+                    for fig in drag_figures:
+                        graph.send_figure_to_back(fig)
             window["-INFO-"].update(value=f"Mouse {values['-GRAPH-']}")
         
-        elif values["-PMT_POINT-"] and event.endswith('+UP'):  # The drawing has ended because mouse up
-            window["-INFO-"].update(value=f"Made point at ({start_pt[0]}, {start_pt[1]})")
+        
+        elif event.endswith('+UP'):
+            window["-INFO-"].update(value=f'Made point at ({start_pt[0]}, {start_pt[1]})')
             
             coord_dict["Img"].append(filename)
             coord_dict["FN"].append(i)
             coord_dict["X"].append(start_pt[0])
             coord_dict["Y"].append(start_pt[1])
-            ## == insert function to put in PMT ID
-            pmt_id = input("Please enter PMT ID.")
-            coord_dict["ID"].append(pmt_id)
+            
+            # func.write_coords_to_csv(coord_dict, 'test.csv')
             
             start_pt, end_pt = None, None  # enable making a new point
             dragging = False
             prior_rect = None
-            i+=1
-            j=0
             
-        elif values["-BOLT_POINT-"] and event.endswith('+UP'):  # The drawing has ended because mouse up
-            window["-INFO-"].update(value=f"Made point at ({start_pt[0]}, {start_pt[1]})")
-            
-            coord_dict["Img"].append(filename)
-            coord_dict["FN"].append(i)
-            coord_dict["X"].append(start_pt[0])
-            coord_dict["Y"].append(start_pt[1])
-            ## == insert function to put in PMT ID
-            coord_dict["ID"].append(str(pmt_id+"-0"+str(j)))
-            
-            start_pt, end_pt = None, None  # enable making a new point
-            dragging = False
-            prior_rect = None
-            i+=1
-            j+=1
-            if j == 25:
+            if values["-PMT_POINT-"]:
+                pmt_id = input("Please enter PMT ID.")
+                coord_dict["ID"].append(pmt_id)
+                
+                i+=1
                 j=0
-            # event == "-COL-"
             
-        elif event.endswith('+RIGHT+'):  # Righ click
-            window["-INFO-"].update(value=f"Right clicked location {values['-GRAPH-']}")
+            if values["-BOLT_POINT-"]:
+                ## == insert function to put in PMT ID
+                coord_dict["ID"].append(str(pmt_id+"-0"+str(j)))
+                
+                i+=1
+                j+=1
+                if j == 25:
+                    j=0
+            
         elif event.endswith('+MOTION+'):  # Righ click
             window["-INFO-"].update(value=f"mouse freely moving {values['-GRAPH-']}")
         elif event == 'Erase item':
             if values['-GRAPH-'] != (None, None):
-                drag_figures = graph.get_figures_at_location(values['-GRAPH-'])
-                for figure in drag_figures:
+                delete_figure = graph.get_figures_at_location(values['-GRAPH-'])
+                for figure in delete_figure:
                     graph.delete_figure(figure)
-                    
-## =========================== Zooming and Panning ================================
-
-        # # Handle image zoom and pan
-        # if event == '-ZOOM-':
-        #     zoom_level = values['-ZOOM-']
-        #     if image:
-        #         zoomed_image = zoom_image(image_paths[image_index], zoom_level, pan_position)
-        #         window['image_display'].update(data=cv2.imencode('.png', zoomed_image)[1].tobytes())
         
-        # if event == 'image_display':
-        #     if values['image_display']:
-        #         x, y = values['image_display']
-        #         if zoom_level != 1.0:
-        #             pan_position[0] += int(x / zoom_level) - int((pan_position[0] + x) / zoom_level)
-        #             pan_position[1] += int(y / zoom_level) - int((pan_position[1] + y) / zoom_level)
-        #             zoomed_image = zoom_image(image_paths[image_index], zoom_level, pan_position)
-        #             window['image_display'].update(data=cv2.imencode('.png', zoomed_image)[1].tobytes())
-        
-## either open up new CV 
-        
-        # if event == 'Zoom In':
-        #     zoom_level *= 1.2
-        #     new_width = int(pil_image.width * zoom_level)
-        #     new_height = int(pil_image.height * zoom_level)
-        #     resized_image = pil_image.resize((new_width, new_height))
-        #     photo_image = sg.tkinter.PhotoImage(resized_image)
-        #     graph.erase()
-        #     graph.draw_image(data=photo_image, location=(0, var.height))
-            
-        # if event == 'Zoom Out':
-        #     zoom_level /= 1.2
-        #     new_width = int(pil_image.width * zoom_level)
-        #     new_height = int(pil_image.height * zoom_level)
-        #     resized_image = pil_image.resize((new_width, new_height))
-        #     photo_image = sg.tkinter.PhotoImage(resized_image)
-        #     graph.erase()
-        #     graph.draw_image(data=photo_image, location=(0, var.height))
-            
-        # Pan around the image
-        # if event == '-GRAPH-':
-        #     x, y = values['-GRAPH-']
-        #     dx = x - pan_position[0]
-        #     dy = y - pan_position[1]
-        #     pan_position = (x, y)
-        #     graph.move(-dx, dy)
 
 ## =========================== Overlaying known coordinates =======================        
 
@@ -302,34 +265,56 @@ def main():
                 # print(x_overlay[i], y_overlay[i])
                 graph.draw_point((int(x_overlay[i]), int(y_overlay[i])), size=8)
         
+        
+## ======================== Menubar functions =======================================        
+        
         elif event == 'Copy':
             func.copy(window)
         
-        elif event == '-SAVE-':
+        elif event == '-SAVE-' or event == "Save": ## saves annotated image and objects
             dir_name = os.path.dirname(filename)
             base = os.path.basename(filename)
             annotate_fname = str(dir_name)+r"/annotated_"+str(base)
             func.save_element_as_file(graph, annotate_fname)
             
-        elif event == 'Undo':
-            if len(coord_dict) > 0:
-                for k, v in coord_dict.items():
-                    v.pop() ## remove the last point from the dictionary of point coordinates
-                
-                ## redraw the image on the graph element
-                image, pil_image, filename, value_file = func.disp_image(window, values, fnames, location=1)
-                
-                ## draw the associated points on the image again? 
-                for i in range(len(coord_dict)):
-                    graph.draw_point((coord_dict["X"][i], coord_dict["Y"][i]), color = 'red', size=8)
+        elif event == '&Undo point':
+            
+            try:
+                if len(coord_dict) > 0: 
+                    delete_figure = graph.get_figures_at_location(values['-GRAPH-'])
+                   
+                    for figure in delete_figure[1:]:
+                            
+                        for k, v in coord_dict.items():
+                            print(len(coord_dict))
+                            v.pop() ## remove the last point from the dictionary of point coordinates
+                            print(len(coord_dict))
+                        graph.delete_figure(figure)
+            except:
+                pass
+                    
+        elif event == 'Change Canvas Size':
+            func.change_canvas_size(window, graph)
+            
+        elif event == 'Resize Image':
+            
+            if ids is not None:
+                graph.delete_figure(ids) ## delete the figure on the canvas if displaying a new one
+            
+            try:
+                new_size = ast.literal_eval(input("Please enter the image size '##, ##': "))
+                im_array = np.array(image, dtype=np.uint8)
+                data = func.resize(im_array, new_size)
+                graph.draw_image(data=data, location=(0,var.height))
+            except:
+                sg.popup_ok("Please check your size input format. E.g. ##, ##")
                 
     window.close() ## For when the user presses the Exit button
     
 main()
 
-print(coord_dict)
+# print(coord_dict)
 
-# func.write_coords_to_csv(coord_dict, 'test.csv')
 
 #%% Trying extra programs
 

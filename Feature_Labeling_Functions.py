@@ -39,6 +39,8 @@ import Feature_Labeling_Variables as var
 #         ctypes.windll.user32.SetProcessDPIAware()
 
 
+img_types = (".png", ".jpg", ".PNG", ".JPG", ".jpeg", ".JPEG")
+
 ## Converting JPG to PNG
 def jpg_to_png(jpg_path):
     
@@ -52,13 +54,24 @@ def jpg_to_png(jpg_path):
     img_rgba = img.convert("RGBA")
     
     # Get the file name and extension of the .jpg file
-    file_name, file_ext = jpg_path.split("/")[-1].split(".")
+    file_name = os.path.splitext(os.path.basename(jpg_path))[0]
     
     # Save the converted image as .png format to the specified directory
     png_dir = os.path.dirname(jpg_path)
-    png_path = rf"{file_name}.png"
+    png_path = rf"{png_dir}\{file_name}.png"
     img_rgba.save(png_path, format="png")
+    
+    return png_path
+    
 
+def change_canvas_size(window, graph):
+    
+    """" This function allows the user to input the size of the graph/column/scrollable area."""
+    
+    width, height = input("Please enter a width and then a height with a space ('## ##'): ").split()
+    graph.Widget.configure(width=width, height=height)
+    window.refresh()
+    window["-COL-"].contents_changed()
 
 
 def parse_folder(window, values):
@@ -73,29 +86,50 @@ def parse_folder(window, values):
     except:
         file_list = []
     
-    fnames = [ ## filter down list of files to files ending with extension ".png" or ".gif"
+    fnames = [ ## filter down list of files to files ending with extensions from img_types
         f
         for f in file_list
         ## case sensitive
-        if os.path.isfile(os.path.join(folder, f)) 
-        and f.lower().endswith((".gif", ".png"))
+        if os.path.isfile(os.path.join(folder, f)) and 
+        f.lower().endswith(img_types)
     ]
     window["-FILE LIST-"].update(fnames) ## list of files updated with chosen folder's contents
 
     return fnames
     
 
-def array_to_data(array):
+def array_to_data(im, filename):
     
     """ Converting images from array type to data to display in the graph element."""
     
+    # im = Image.fromarray(array)
+
+    with io.BytesIO() as output:
+        if im.format == "PNG":
+            im.save(output, format="PNG")
+        else:
+            png_img = jpg_to_png(filename)
+            png_img = Image.open(png_img)
+            png_img.save(output, format="PNG")
+        data = output.getvalue()
+    return data
+
+
+def resize(array, new_size):
+    
+    """ To allow the user to resize the image displayed in the graph."""
+    
     im = Image.fromarray(array)
+    im = im.resize(new_size, Image.ANTIALIAS)
+    
     with io.BytesIO() as output:
         im.save(output, format="PNG")
         data = output.getvalue()
     return data
 
+
 global filename
+
 
 ## User selected an image to display
 def disp_image(window, values, fnames, location): 
@@ -130,9 +164,9 @@ def disp_image(window, values, fnames, location):
 
     ## converting image type to array and then array to data
     im = Image.open(filename)
-    im_array = np.array(im, dtype=np.uint8)
-    data = array_to_data(im_array)
-    window["-GRAPH-"].draw_image(data=data, location=(0,var.height))
+    # im_array = np.array(im, dtype=np.uint8) ##convering to array is unnecessary?
+    data = array_to_data(im, filename)
+    ids = window["-GRAPH-"].draw_image(data=data, location=(0,var.height))
 
     ## Open .csv file to write feature coordinates to
     csv_file = open(os.path.splitext(filename)[0]+".csv", "a+")
@@ -141,7 +175,7 @@ def disp_image(window, values, fnames, location):
         im_bytes = f.read()
     pil_image = Image.open(io.BytesIO(im_bytes))
     
-    return im, pil_image, filename, csv_file
+    return im, pil_image, filename, csv_file, ids
 
 
 
@@ -199,6 +233,7 @@ def opencv_overlay(pic_file, coords_file, num, base):
     cv.imshow("Trial2"+str(num), img2)
     cv.imwrite("With_points_"+str(base)+".png", img2)
 
+
 def save_element_as_file(element, filename):
     """
     Saves any element as an image file.  Element needs to have an underlying Widget available (almost if not all of them do)
@@ -209,6 +244,7 @@ def save_element_as_file(element, filename):
     box = (widget.winfo_rootx(), widget.winfo_rooty(), widget.winfo_rootx() + widget.winfo_width(), widget.winfo_rooty() + widget.winfo_height())
     grab = ImageGrab.grab(bbox=box)
     grab.save(filename)
+    
     
 def write_coords_to_csv(dict_name, filename):
     df=pd.DataFrame.from_dict(dict_name, orient='index')
