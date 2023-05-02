@@ -136,12 +136,12 @@ def main():
                 if ids is not None:
                     graph.delete_figure(ids) ## delete the figure on the canvas if displaying a new one
                 
-                image, pil_image, filename, csv_file, ids = func.disp_image(window, values, fnames, location=0)
+                image, pil_image, filename, ids = func.disp_image(window, values, fnames, location=0)
                 window.refresh()
                 window["-COL-"].contents_changed()
                 
                 ## Tries to overlay points if the image has associated coordinate file
-                x_overlay, y_overlay, id_overlay, pts_fname = func.autoload_pts(graph, filename, coord_dict["ID"],
+                x_overlay, y_overlay, id_overlay, pts_fname = func.autoload_pts(values, graph, filename, coord_dict["ID"],
                                                                                 coord_dict["X"], coord_dict["Y"])
                 
                 ## ids, x and y coordinates already added to dictionary
@@ -157,11 +157,11 @@ def main():
             if ids is not None:
                 graph.delete_figure(ids) ## delete the figure on the canvas if displaying a new one
                 
-            image, pil_image, filename, csv_file, ids = func.disp_image(window, values, fnames, location=1)
+            image, pil_image, filename, ids = func.disp_image(window, values, fnames, location=1)
             window.refresh()
             window["-COL-"].contents_changed()
             
-            x_overlay, y_overlay, id_overlay, pts_fname = func.autoload_pts(graph, filename, coord_dict["ID"],
+            x_overlay, y_overlay, id_overlay, pts_fname = func.autoload_pts(values, graph, filename, coord_dict["ID"],
                                                                             coord_dict["X"], coord_dict["Y"])
             
             feature_nums = np.arange(1,len(x_overlay))
@@ -175,11 +175,11 @@ def main():
             if ids is not None:
                 graph.delete_figure(ids) ## delete the figure on the canvas if displaying a new one
             
-            image, pil_image, filename, csv_file, ids = func.disp_image(window, values, fnames, location=-1)
+            image, pil_image, filename, ids = func.disp_image(window, values, fnames, location=-1)
             window.refresh()
             window["-COL-"].contents_changed()
             
-            x_overlay, y_overlay, id_overlay, pts_fname = func.autoload_pts(graph, filename, coord_dict["ID"],
+            x_overlay, y_overlay, id_overlay, pts_fname = func.autoload_pts(values, graph, filename, coord_dict["ID"],
                                                                             coord_dict["X"], coord_dict["Y"])
             
             feature_nums = np.arange(1,len(x_overlay)+1)
@@ -345,7 +345,7 @@ def main():
             # func.save_element_as_file(column, annotate_fname)
             
         elif event == '-CSV-':
-            func.write_coords_to_csv(coord_dict, csv_file)
+            func.write_coords_to_csv(coord_dict, filename)
             
         elif event == '&Undo point':
             

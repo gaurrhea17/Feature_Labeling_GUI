@@ -187,14 +187,11 @@ def disp_image(window, values, fnames, location):
     data = array_to_data(im, filename)
     ids = window["-GRAPH-"].draw_image(data=data, location=(0,var.height))
 
-    ## Open .csv file to write feature coordinates to
-    csv_file = open(os.path.splitext(filename)[0]+".csv", "a+")
-
     with open(filename, 'rb') as f:
         im_bytes = f.read()
     pil_image = Image.open(io.BytesIO(im_bytes))
     
-    return im, pil_image, filename, csv_file, ids
+    return im, pil_image, filename, ids
 
 
 
@@ -273,10 +270,11 @@ def save_element_as_file(element, filename):
         sg.popup_ok("The file could not be saved.")
 
 
-def autoload_pts(graph, filename, id_dict, x_dict, y_dict):
+def autoload_pts(values, graph, filename, id_dict, x_dict, y_dict):
     try:
     
-        pts_dir = r'C:\Users\gaurr\TB3\BarrelSurveyRings\points'
+        pts_dir = os.path.dirname(values["-FOLDER-"])+r'\points'
+        print(pts_dir)
         pts_file = os.path.basename(filename).split('.')[0]
         pts_fname = os.path.join(pts_dir, pts_file) + ".txt" 
         x_overlay, y_overlay, id_overlay = overlay_pts(pts_fname) ## overlaying coordinates
@@ -298,9 +296,19 @@ def autoload_pts(graph, filename, id_dict, x_dict, y_dict):
         pass
     
 def write_coords_to_csv(dict_name, filename):
+    ## Open .csv file to write feature coordinates to; w+ means open will truncate the file
+    csv_file = open(os.path.splitext(filename)[0]+".csv", "w+")
     df=pd.DataFrame.from_dict(dict_name, orient='index')
     df = df.transpose()
-    df.to_csv(filename, index=None, mode='w')
+    df.to_csv(csv_file, index=None, mode='w')
+    
+# def calculate_polars(dict_name):
+#     suffix = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', 
+#               '20', '21', '22', '23', '24']
+#     for i in range(len(dict_name["X"])):
+#         if str(dict_name["ID"]).endswith('00'):
+#             if str(dict_name["ID"].endswith(tuple(suffix))):
+#                 rvec = 
     
 def bolt_labels(dict_name, bolt_x, bolt_y):
     buffer_r = []
@@ -312,17 +320,20 @@ def bolt_labels(dict_name, bolt_x, bolt_y):
             y = abs(bolt_y - float(dict_name["Y"][i]))
             buffer_r.append(np.sqrt(x**2 + y**2))
     
-    pmt_id = np.where(buffer_r == min(buffer_r))[0] ## index where distance between bolt and PMT is minimum
+    pmt_id = np.where(buffer_r == min(buffer_r))[0][0] +1 ## PMT number where distance between bolt and PMT is minimum
+    print("ID where min. distance between bolt and dynode :", pmt_id)
     
     theta = math.degrees(np.arctan(x/y)) ## angle between dynode and bolt
+    print(theta)
     
     for i in range(len(dict_name["ID"])):
         for j in range(len(suffix)):
             check_name = str(pmt_id)+'-'+suffix[j]
+            print(check_name)
             if str(dict_name["ID"][i]).endswith(check_name):
                 check_angle = math.degrees(np.arctan(dict_name["X"][i]/dict_name["Y"][i]))
                 if theta > check_angle:
-                    bolt_label = dict_name["ID"][i].replace(suffix[j]),str(int(suffix[j])+1)
+                    bolt_label = dict_name["ID"][i].replace(suffix[j],str(int(suffix[j])+1))
                     dict_name["ID"].append(bolt_label)
                     print("new bolt: ", bolt_label)
                     
