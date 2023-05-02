@@ -8,9 +8,8 @@ both the functions and GUI modules for the feature labeling GUI.
 @author: gaurr
 """
 
-## Window column 2: name of chosen image and image display
-width, height = 4000, 2750
-column_width = 3000
-column_height = 2250
+width, height = 4000, 2750 ## sizes of images
+column_width = 1000
+column_height = 750
 
 global value_file, graph

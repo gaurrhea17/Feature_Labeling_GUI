@@ -10,7 +10,8 @@ This file hosts all of the user-defined functions referenced in the
 
 ## Importing necessary packages
 
-
+import json
+import math
 import numpy as np
 import glob
 from PIL import Image, ImageDraw, ImageGrab
@@ -41,7 +42,7 @@ import Feature_Labeling_Variables as var
 
 img_types = (".png", ".jpg", ".PNG", ".JPG", ".jpeg", ".JPEG")
 
-## Converting JPG to PNG
+## Converting a single JPG to PNG
 def jpg_to_png(jpg_path):
     
    """ This function can be called to convert .jpg images to .png format. 
@@ -62,6 +63,24 @@ def jpg_to_png(jpg_path):
     img_rgba.save(png_path, format="png")
     
     return png_path
+
+## Converting a folder of JPGs to PNGs
+
+def jpg_folder_to_png(directory):
+    for fname in os.listdir(directory):
+        if fname.endswith(".jpg"):
+            im = Image.open(os.path.join(directory, fname))
+            img_rgba = im.convert('RGBA')
+            
+            filename = os.path.splitext(fname)[0]
+            new_filename = str(os.path.join(directory, filename)) + '.png'
+            img_rgba.save(new_filename)
+            
+            os.remove(os.path.join(directory, fname)) ## deletes the .jpg
+            continue
+        else:
+            continue
+            
     
 
 def change_canvas_size(window, graph):
@@ -182,7 +201,9 @@ def disp_image(window, values, fnames, location):
 def copy(window):
     
     """"This function can be used to copy the annotated image onto the
-    user's clipboard."""
+    user's clipboard.
+    
+    DOES NOT CURRENTLY WORK"""
     
     widget = window.find_element_with_focus().widget
     if widget.select_present():
@@ -191,10 +212,9 @@ def copy(window):
         window.TKroot.clipboard_append(text)
 
 
-
-
 def overlay_pts(filename):
     data = np.loadtxt(filename, dtype = str)
+
     x_coords = data[:,2]
     y_coords = data[:,3]
     pmt_ids = data[:,1]
@@ -214,7 +234,7 @@ def overlay_pts(filename):
     return x_coords, y_coords, pmt_ids
 
 
-def opencv_overlay(pic_file, coords_file, num, base):
+def opencv_overlay(pic_file, coords_file, annotate_fname, base):
     
     """ This function can be used to open images using OpenCV and overlay the labeled points. This will not
     allow the user to move the points and should only be used to view and save images with labels as .png files."""
@@ -222,16 +242,18 @@ def opencv_overlay(pic_file, coords_file, num, base):
     image = cv.imread(pic_file)
     x, y, ids = overlay_pts(coords_file)
     img_circle = image.copy()
-    cv.namedWindow("Trial2"+str(num), cv.WINDOW_NORMAL)
+    
+    annotate_fname = str(pic_file)
+    cv.namedWindow(annotate_fname, cv.WINDOW_NORMAL)
     img2 = cv.resize(img_circle, (4000,2750)) ## cropped original (4000, 3000) to remove watermark
     for i in range(len(x)):
         if str(ids[i]).endswith('00'):
-            cv.circle(img2, (int(x[i]), int(y[i])), radius=0, color=(0,0,255), thickness=10)
+            cv.circle(img2, (int(float(x[i])), int(float(y[i]))), radius=0, color=(0,0,255), thickness=10)
         else:
-            cv.circle(img2, (int(x[i]), int(y[i])), radius=0, color=(0,255,0), thickness=4)
+            cv.circle(img2, (int(float(x[i])), int(float(y[i]))), radius=0, color=(0,255,0), thickness=4)
     
-    cv.imshow("Trial2"+str(num), img2)
-    cv.imwrite("With_points_"+str(base)+".png", img2)
+    cv.imshow(annotate_fname, img2)
+    # cv.imwrite("With_points_"+str(base)+".png", img2)
 
 
 def save_element_as_file(element, filename):
@@ -240,13 +262,70 @@ def save_element_as_file(element, filename):
     :param element: The element to save
     :param filename: The filename to save to. The extension of the filename determines the format (jpg, png, gif)
     """
-    widget = element.Widget
-    box = (widget.winfo_rootx(), widget.winfo_rooty(), widget.winfo_rootx() + widget.winfo_width(), widget.winfo_rooty() + widget.winfo_height())
-    grab = ImageGrab.grab(bbox=box)
-    grab.save(filename)
+    try:
+        widget = element.Widget
+        # box = (widget.winfo_rootx(), widget.winfo_rooty(), widget.winfo_rootx() + widget.winfo_width(), widget.winfo_rooty() + widget.winfo_height())
+        box = (0, 0, 500, 500)
+        grab = ImageGrab.grab(bbox=box)
+        grab.save(filename)
+        sg.popup_ok("Your image has been saved with annotations!")
+    except:
+        sg.popup_ok("The file could not be saved.")
+
+
+def autoload_pts(graph, filename, id_dict, x_dict, y_dict):
+    try:
     
+        pts_dir = r'C:\Users\gaurr\TB3\BarrelSurveyRings\points'
+        pts_file = os.path.basename(filename).split('.')[0]
+        pts_fname = os.path.join(pts_dir, pts_file) + ".txt" 
+        x_overlay, y_overlay, id_overlay = overlay_pts(pts_fname) ## overlaying coordinates
+        for i in range(len(x_overlay)):
+            if str(id_overlay[i]).endswith('00'):
+                graph.draw_point((float(x_overlay[i]), 2750 - float(y_overlay[i])), color = 'red', size=10)
+                id_dict.append(id_overlay[i])
+                x_dict.append(x_overlay[i])
+                y_dict.append(y_overlay[i])
+            else:
+                graph.draw_point((float(x_overlay[i]), 2750 - float(y_overlay[i])), color = 'yellow', size = 8)
+                id_dict.append(id_overlay[i])
+                x_dict.append(x_overlay[i])
+                y_dict.append(y_overlay[i])
+        
+        return x_overlay, y_overlay, id_overlay, pts_fname
+        
+    except:
+        pass
     
 def write_coords_to_csv(dict_name, filename):
     df=pd.DataFrame.from_dict(dict_name, orient='index')
     df = df.transpose()
     df.to_csv(filename, index=None, mode='w')
+    
+def bolt_labels(dict_name, bolt_x, bolt_y):
+    buffer_r = []
+    suffix = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', 
+              '20', '21', '22', '23', '24']
+    for i in range(len(dict_name["ID"])):
+        if str(dict_name["ID"][i]).endswith('00'):
+            x = abs(bolt_x - dict_name["X"][i])
+            y = abs(bolt_y - dict_name["Y"][i])
+            buffer_r.append(np.sqrt(x**2 + y**2))
+    
+    pmt_id = np.where(buffer_r == min(buffer_r))[0]
+    
+    theta = math.degrees(np.arctan(x/y)) ## angle between dynode and bolt
+    for i in range(len(dict_name["ID"])):
+        check_name = str(pmt_id)+'-'+tuple(suffix)
+        if str(dict_name["ID"][i]).endswith(check_name):
+            check_angle = math.degrees(np.arctan(float(dict_name["X"][i])/float(dict_name["Y"][i])))
+            if theta > check_angle:
+                for j in range(len(suffix)):
+                    if check_name.endswith(int(suffix[j])):
+                        dict_name["ID"].append('0000'+pmt_id+'-'+str(int(suffix[j]+1)))
+                
+                dict_name["X"].append(bolt_x)
+                dict_name["Y"].append(bolt_y)
+    
+    return pmt_id, theta
+            

@@ -31,6 +31,7 @@ sys.path.append(r'C:\Users\gaurr\OneDrive - TRIUMF\Super-K\Reconstruction\Photog
 
 # sg.theme_previewer() ## Use to see all the colour themes available
 sg.theme('GreenTan') ## setting window colour scheme
+sg.set_options(dpi_awareness=True)
 
 ## Dictionary with necessary lists of coordinates
 coord_dict = {"Img": [], "FN": [], "ID": [], "X":[], "Y":[]}
@@ -67,14 +68,14 @@ mov_col = [[sg.T('Choose what you want to do:', enable_events=True)],
            [sg.R('Fill in remaining labels', 1, key='-AUTO_LABEL-', enable_events=True)],
            ]
 
-column = [[sg.Graph(canvas_size = (var.width, var.height), graph_bottom_left = (0,0), 
-graph_top_right = (var.width, var.height), key = "-GRAPH-", ## can include "change_submits = True"
+column = [[sg.Graph(canvas_size = (var.width, var.height), graph_bottom_left = (0,0), graph_top_right = (var.width,var.height), 
+key = "-GRAPH-", ## can include "change_submits = True"
 background_color = 'white', expand_x =True, expand_y = True, enable_events = True, drag_submits = True, right_click_menu=[[],['Erase Item',]])]]
 
 image_viewer_col_2 = [
     [sg.Text("Choose an image from list on the left: ")],
     [sg.Text(size=(40,1), key="-TOUT-")],
-    [sg.Column(column, size=(var.column_height, var.column_width), scrollable = True, key = "-COL-")],
+    [sg.Column(column, size=(var.column_width, var.column_height), scrollable = True, key = "-COL-")],
     [sg.Text(key="-INFO-", size=(90,1))],
     ]
 
@@ -109,6 +110,7 @@ def main():
     dragging = False
     start_pt = end_pt = prior_rect = None
     ids = None ## used to specify which figure on sg.Graph to delete
+    buffer_list = [] ## list to hold coordinates for points being dragged
     
     while True:
         event, values = window.read()
@@ -136,8 +138,19 @@ def main():
                 image, pil_image, filename, csv_file, ids = func.disp_image(window, values, fnames, location=0)
                 window.refresh()
                 window["-COL-"].contents_changed()
+                
+                ## Tries to overlay points if the image has associated coordinate file
+                x_overlay, y_overlay, id_overlay, pts_fname = func.autoload_pts(graph, filename, coord_dict["ID"],
+                                                                                coord_dict["X"], coord_dict["Y"])
+                
+                ## ids, x and y coordinates already added to dictionary
+                feature_nums = np.arange(1,len(x_overlay))
+                coord_dict["FN"].append(feature_nums)
+                coord_dict["Img"].append(filename)
+                
                 if filename not in coord_dict["Img"]:
                     i=1 ## counter for feature number
+        
         if event == "-NEXT-":
             
             if ids is not None:
@@ -146,6 +159,14 @@ def main():
             image, pil_image, filename, csv_file, ids = func.disp_image(window, values, fnames, location=1)
             window.refresh()
             window["-COL-"].contents_changed()
+            
+            x_overlay, y_overlay, id_overlay, pts_fname = func.autoload_pts(graph, filename, coord_dict["ID"],
+                                                                            coord_dict["X"], coord_dict["Y"])
+            
+            feature_nums = np.arange(1,len(x_overlay))
+            coord_dict["FN"].append(feature_nums)
+            coord_dict["Img"].append(filename)
+            
             if filename not in coord_dict["Img"]:
                 i=1 ## counter for feature number
         if event == "-PREV-":
@@ -156,41 +177,51 @@ def main():
             image, pil_image, filename, csv_file, ids = func.disp_image(window, values, fnames, location=-1)
             window.refresh()
             window["-COL-"].contents_changed()
+            
+            x_overlay, y_overlay, id_overlay, pts_fname = func.autoload_pts(graph, filename, coord_dict["ID"],
+                                                                            coord_dict["X"], coord_dict["Y"])
+            
+            feature_nums = np.arange(1,len(x_overlay)+1)
+            coord_dict["FN"].append(feature_nums)
+            coord_dict["Img"].append(filename)
+            
             if filename not in coord_dict["Img"]:
                 i=1 ## counter for feature number
         
 ## =============== Annotation Features ========================            
             
         if event in ('-MOVE-', '-MOVEALL-'):
-            graph.set_cursor(cursor='fleur')
+            graph.set_cursor(cursor='cross')
         elif not event.startswith('-GRAPH-'):
             graph.set_cursor(cursor='left_ptr') 
         
         if event == "-GRAPH-":
             x, y = values["-GRAPH-"]
+            buffer_list.append(values["-GRAPH-"])
             if not dragging:
                 start_pt = (x, y)
                 dragging = True
                 drag_figures = graph.get_figures_at_location((x,y))
 
-                print("Drag figures info", drag_figures, len(drag_figures))
+                print("Drag figures info", drag_figures, len(drag_figures))        
                 lastxy = x,y
             else:
                 end_pt = (x,y)
             if prior_rect:
                 graph.delete_figure(prior_rect)
                 
-            delta_x, delta_y = x - lastxy[0], y - lastxy[1]
+            delta_x, delta_y = x - lastxy[0], y - lastxy[1] 
+            
             lastxy = (x, y)
             
             if None not in (start_pt, end_pt):
                 if values['-MOVE-']:
-                    if len(drag_figures)>1: ## removing the background image from the tuple of objects that can be dragged
-                        drag_figures = drag_figures[1:]
-                        print(drag_figures)
-                    for fig in drag_figures:
-                        graph.move_figure(fig, delta_x, delta_y)
-                        graph.update()
+                    if len(drag_figures)==1:
+                        pass;
+                    elif len(drag_figures)>1: ## removing the background image from the tuple of objects that can be dragged
+                        for fig in drag_figures[1:]:
+                            graph.move_figure(fig, delta_x, delta_y)
+                            graph.update()
                 # elif values['-RECT-']:
                 #     prior_rect = graph.draw_rectangle(start_pt, end_pt,fill_color='green', line_color='red')
                 # elif values['-CIRCLE-']:
@@ -218,18 +249,33 @@ def main():
         
         
         elif event.endswith('+UP'):
-            window["-INFO-"].update(value=f'Made point at ({start_pt[0]}, {start_pt[1]})')
+            window["-INFO-"].update(value=f'Made point at ({end_pt[0]}, {end_pt[1]})')
             
-            coord_dict["Img"].append(filename)
-            coord_dict["FN"].append(i)
-            coord_dict["X"].append(start_pt[0])
-            coord_dict["Y"].append(start_pt[1])
+            # if start_pt[0] not in coord_dict["X"] and start_pt[1] not in coord_dict["Y"]: ## if the point is not already there, then add it
+            #     coord_dict["Img"].append(filename)
+            #     print(coord_dict["FN"][-1])
+            #     coord_dict["X"].append(start_pt[0])
+            #     coord_dict["Y"].append(start_pt[1])
             
-            # func.write_coords_to_csv(coord_dict, 'test.csv')
             
-            start_pt, end_pt = None, None  # enable making a new point
-            dragging = False
-            prior_rect = None
+            ## check for the points previous coordinates in the dictionary. If they exist, update them
+            for i in range(len(coord_dict["X"])):
+                x_max, x_min = float(coord_dict["X"][i])+10, float(coord_dict["X"][i]) - 10
+                y_max, y_min = float(coord_dict["Y"][i])+10, float(coord_dict["Y"][i]) - 10
+                
+                print(start_pt[0], start_pt[1])
+                print(x_max, x_min, i)
+                
+                ## checks range of points within +/- 10 pixels due to click uncertainty
+                if start_pt[0] < x_max and start_pt [0] > x_min and start_pt[1] < y_max and start_pt[1] > y_min:
+                                     
+                    print("Found point to replace, ", i)
+                    coord_dict["X"][i] = end_pt[0]
+                    coord_dict["Y"][i] = end_pt[1]
+                    print(f"The old coordinates were {start_pt}")
+                    print(f"The new coordinates are {end_pt}")
+                    
+            # print(coord_dict)
             
             if values["-PMT_POINT-"]:
                 pmt_id = input("Please enter PMT ID.")
@@ -239,43 +285,64 @@ def main():
                 j=0
             
             if values["-BOLT_POINT-"]:
-                ## == insert function to put in PMT ID
-                coord_dict["ID"].append(str(pmt_id+"-0"+str(j)))
                 
-                i+=1
-                j+=1
-                if j == 25:
-                    j=0
+                ## checks which pmt the bolt belongs to and returns ID of the PMT
+                ## along with the angle between the dynode and the bolt
+                
+                pmt_id, theta = func.bolt_labels(coord_dict, end_pt[0], end_pt[1])
+                
+                ## was for feature counting with all manual labeling
+                # i+=1
+                # j+=1
+                # if j == 25:
+                #     j=0
             
-        elif event.endswith('+MOTION+'):  # Righ click
-            window["-INFO-"].update(value=f"mouse freely moving {values['-GRAPH-']}")
+            # func.write_coords_to_csv(coord_dict, 'test.csv')
+            
+            start_pt, end_pt = None, None  # enable making a new point
+            dragging = False
+            prior_rect = None
+            buffer_list = []
+            print("Dragging done. Buffer list: ", buffer_list)
+            
+            
         elif event == 'Erase item':
             if values['-GRAPH-'] != (None, None):
                 delete_figure = graph.get_figures_at_location(values['-GRAPH-'])
-                for figure in delete_figure:
-                    graph.delete_figure(figure)
+                if len(delete_figure) == 1:
+                    pass;
+                if len(delete_figure)>1:
+                    for figure in delete_figure[1:]:
+                        graph.delete_figure(figure)
         
 
 ## =========================== Overlaying known coordinates =======================        
 
         if event == "-OVERLAY-": ## if we want to overlay known coordinates on an image
             print(values["-OVERLAY-"])
-            x_overlay, y_overlay, pmt_id_overlay = func.overlay_pts(values["-OVERLAY-"])
+            x_overlay, y_overlay, id_overlay = func.overlay_pts(values["-OVERLAY-"])
             for i in range(len(x_overlay)):
-                # print(x_overlay[i], y_overlay[i])
-                graph.draw_point((int(x_overlay[i]), int(y_overlay[i])), size=8)
-        
+                if str(id_overlay[i]).endswith('00'):
+                    id_overlay[i] = graph.draw_point((float(x_overlay[i]), 2750 - float(y_overlay[i])), color = 'red', size=10)
+                    coord_dict["ID"].append(id_overlay[i])
+                    coord_dict["X"].append(x_overlay[i])
+                    coord_dict["Y"].append(y_overlay[i])
+                else:
+                   id_overlay[i] = graph.draw_point((float(x_overlay[i]), float(y_overlay[i])), color = 'yellow', size = 8)
+                   coord_dict["ID"].append(id_overlay[i])
+                   coord_dict["X"].append(x_overlay[i])
+                   coord_dict["Y"].append(y_overlay[i])
         
 ## ======================== Menubar functions =======================================        
         
         elif event == 'Copy':
             func.copy(window)
         
-        elif event == '-SAVE-' or event == "Save": ## saves annotated image and objects
+        elif event == '-SAVE-': ## saves annotated image and objects
             dir_name = os.path.dirname(filename)
             base = os.path.basename(filename)
             annotate_fname = str(dir_name)+r"/annotated_"+str(base)
-            func.save_element_as_file(graph, annotate_fname)
+            # func.save_element_as_file(column, annotate_fname)
             
         elif event == '&Undo point':
             
@@ -313,8 +380,6 @@ def main():
     
 main()
 
-# print(coord_dict)
-
 
 #%% Trying extra programs
 
@@ -332,13 +397,24 @@ main()
 # cv.setMouseCallback(img_name, select_feature)
  
 
+# directory =  r'C:\Users\gaurr\TB3\BarrelSurveyRings\images2'
+directory = r'C:\Users\gaurr\OneDrive - TRIUMF\Super-K\Feature Detection & Labelling\Sample_Overlay_SK_Images'
+num = 1
+for f in os.listdir(directory):
+    if f.lower().endswith(".png"):
+        f = os.path.join(directory, f)
+        pic_file = f
+        base = os.path.splitext(os.path.basename(f))[0]
+        coords_file =  directory+"/"+base+".txt"
+        func.opencv_overlay(pic_file, coords_file, str(num), base)
+        num+=1
+        if num >= 1:
+            break;
 
-# num = 1
-# for f in os.listdir(directory):
-#     if f.lower().endswith(".png"):
-#         f = os.path.join(directory, f)
-#         pic_file = f
-#         base = os.path.splitext(os.path.basename(f))[0]
-#         coords_file = os.path.dirname(f)+"/"+base+".txt"
-#         func.opencv_overlay(pic_file, coords_file, num, base)
-#         num+=1
+
+
+## Convert all the BarrelSurveyRings images
+
+# jpg_path = os.path.normpath(r'C:\Users\gaurr\TB3\BarrelSurveyRings\images2')
+
+# func.jpg_folder_to_png(jpg_path)
