@@ -284,13 +284,13 @@ def autoload_pts(graph, filename, id_dict, x_dict, y_dict):
             if str(id_overlay[i]).endswith('00'):
                 graph.draw_point((float(x_overlay[i]), 2750 - float(y_overlay[i])), color = 'red', size=10)
                 id_dict.append(id_overlay[i])
-                x_dict.append(x_overlay[i])
-                y_dict.append(y_overlay[i])
+                x_dict.append(float(x_overlay[i]))
+                y_dict.append(2750 - float(y_overlay[i]))
             else:
                 graph.draw_point((float(x_overlay[i]), 2750 - float(y_overlay[i])), color = 'yellow', size = 8)
                 id_dict.append(id_overlay[i])
-                x_dict.append(x_overlay[i])
-                y_dict.append(y_overlay[i])
+                x_dict.append(float(x_overlay[i]))
+                y_dict.append(2750 - float(y_overlay[i]))
         
         return x_overlay, y_overlay, id_overlay, pts_fname
         
@@ -308,24 +308,24 @@ def bolt_labels(dict_name, bolt_x, bolt_y):
               '20', '21', '22', '23', '24']
     for i in range(len(dict_name["ID"])):
         if str(dict_name["ID"][i]).endswith('00'):
-            x = abs(bolt_x - dict_name["X"][i])
-            y = abs(bolt_y - dict_name["Y"][i])
+            x = abs(bolt_x - float(dict_name["X"][i]))
+            y = abs(bolt_y - float(dict_name["Y"][i]))
             buffer_r.append(np.sqrt(x**2 + y**2))
     
-    pmt_id = np.where(buffer_r == min(buffer_r))[0]
+    pmt_id = np.where(buffer_r == min(buffer_r))[0] ## index where distance between bolt and PMT is minimum
     
     theta = math.degrees(np.arctan(x/y)) ## angle between dynode and bolt
+    
     for i in range(len(dict_name["ID"])):
-        check_name = str(pmt_id)+'-'+tuple(suffix)
-        if str(dict_name["ID"][i]).endswith(check_name):
-            check_angle = math.degrees(np.arctan(float(dict_name["X"][i])/float(dict_name["Y"][i])))
-            if theta > check_angle:
-                for j in range(len(suffix)):
-                    if check_name.endswith(int(suffix[j])):
-                        dict_name["ID"].append('0000'+pmt_id+'-'+str(int(suffix[j]+1)))
-                
-                dict_name["X"].append(bolt_x)
-                dict_name["Y"].append(bolt_y)
+        for j in range(len(suffix)):
+            check_name = str(pmt_id)+'-'+suffix[j]
+            if str(dict_name["ID"][i]).endswith(check_name):
+                check_angle = math.degrees(np.arctan(dict_name["X"][i]/dict_name["Y"][i]))
+                if theta > check_angle:
+                    dict_name["ID"].append(dict_name["ID"][i].replace(suffix[j]),str(int(suffix[j])+1))
+                    
+                    dict_name["X"].append(bolt_x)
+                    dict_name["Y"].append(bolt_y)
     
     return pmt_id, theta
             

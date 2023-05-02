@@ -82,6 +82,7 @@ image_viewer_col_2 = [
 post_process_col= [
     [sg.Column(mov_col)],
     [sg.Button("Save Annotations", size = (15,1), key="-SAVE-")],
+    [sg.Button("Write CSV", size = (15,1), key="-CSV-")],
     [sg.Button("Reconstruct", size=(15,1), key="-RECON-")],
     # [sg.Slider(range=(1,10), orientation='h', resolution=.1, default_value=1, key='-ZOOM-', enable_events=True),],
     [sg.Button('Zoom In'), sg.Button('Zoom Out')],
@@ -260,11 +261,9 @@ def main():
             
             ## check for the points previous coordinates in the dictionary. If they exist, update them
             for i in range(len(coord_dict["X"])):
-                x_max, x_min = float(coord_dict["X"][i])+10, float(coord_dict["X"][i]) - 10
-                y_max, y_min = float(coord_dict["Y"][i])+10, float(coord_dict["Y"][i]) - 10
+                x_max, x_min = coord_dict["X"][i]+10, coord_dict["X"][i] - 10
+                y_max, y_min = coord_dict["Y"][i]+10, coord_dict["Y"][i] - 10
                 
-                print(start_pt[0], start_pt[1])
-                print(x_max, x_min, i)
                 
                 ## checks range of points within +/- 10 pixels due to click uncertainty
                 if start_pt[0] < x_max and start_pt [0] > x_min and start_pt[1] < y_max and start_pt[1] > y_min:
@@ -274,6 +273,7 @@ def main():
                     coord_dict["Y"][i] = end_pt[1]
                     print(f"The old coordinates were {start_pt}")
                     print(f"The new coordinates are {end_pt}")
+                    break;
                     
             # print(coord_dict)
             
@@ -323,12 +323,12 @@ def main():
             x_overlay, y_overlay, id_overlay = func.overlay_pts(values["-OVERLAY-"])
             for i in range(len(x_overlay)):
                 if str(id_overlay[i]).endswith('00'):
-                    id_overlay[i] = graph.draw_point((float(x_overlay[i]), 2750 - float(y_overlay[i])), color = 'red', size=10)
+                    id_overlay[i] = graph.draw_point((x_overlay[i], y_overlay[i]), color = 'red', size=10)
                     coord_dict["ID"].append(id_overlay[i])
                     coord_dict["X"].append(x_overlay[i])
                     coord_dict["Y"].append(y_overlay[i])
                 else:
-                   id_overlay[i] = graph.draw_point((float(x_overlay[i]), float(y_overlay[i])), color = 'yellow', size = 8)
+                   id_overlay[i] = graph.draw_point((x_overlay[i], y_overlay[i]), color = 'yellow', size = 8)
                    coord_dict["ID"].append(id_overlay[i])
                    coord_dict["X"].append(x_overlay[i])
                    coord_dict["Y"].append(y_overlay[i])
@@ -343,6 +343,9 @@ def main():
             base = os.path.basename(filename)
             annotate_fname = str(dir_name)+r"/annotated_"+str(base)
             # func.save_element_as_file(column, annotate_fname)
+            
+        elif event == '-CSV-':
+            func.write_coords_to_csv(coord_dict, csv_file)
             
         elif event == '&Undo point':
             
