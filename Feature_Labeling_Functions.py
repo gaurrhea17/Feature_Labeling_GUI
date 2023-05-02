@@ -322,7 +322,9 @@ def bolt_labels(dict_name, bolt_x, bolt_y):
             if str(dict_name["ID"][i]).endswith(check_name):
                 check_angle = math.degrees(np.arctan(dict_name["X"][i]/dict_name["Y"][i]))
                 if theta > check_angle:
-                    dict_name["ID"].append(dict_name["ID"][i].replace(suffix[j]),str(int(suffix[j])+1))
+                    bolt_label = dict_name["ID"][i].replace(suffix[j]),str(int(suffix[j])+1)
+                    dict_name["ID"].append(bolt_label)
+                    print("new bolt: ", bolt_label)
                     
                     dict_name["X"].append(bolt_x)
                     dict_name["Y"].append(bolt_y)
