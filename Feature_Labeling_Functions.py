@@ -59,7 +59,7 @@ def jpg_to_png(jpg_path):
     
     # Save the converted image as .png format to the specified directory
     png_dir = os.path.dirname(jpg_path)
-    png_path = rf"{png_dir}\{file_name}.png"
+    png_path = os.path.join(png_dir, file_name)+".png"
     img_rgba.save(png_path, format="png")
     
     return png_path
@@ -370,6 +370,7 @@ def bolt_labels(dict_name, bolt_x, bolt_y):
             buffer_x.append(x)
             buffer_y.append(y)
     
+    # This needs to be generalized so not assuming +1
     pmt_id = np.where(np.array(buffer_r) == min(buffer_r))[0][0] +1 ## PMT number where distance between bolt and PMT is minimum
     # print(f"Calculated distance to {len(buffer_r)} PMTs")
     print("ID where min. distance between bolt and dynode :", pmt_id)
