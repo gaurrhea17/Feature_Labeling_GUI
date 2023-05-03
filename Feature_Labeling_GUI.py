@@ -34,7 +34,7 @@ sg.theme('GreenTan') ## setting window colour scheme
 sg.set_options(dpi_awareness=True)
 
 ## Dictionary with necessary lists of coordinates
-coord_dict = {"Img": [], "FN": [], "ID": [], "X":[], "Y":[]}
+coord_dict = {"Img": [], "FN": [], "ID": [], "X":[], "Y":[], "R":[], "theta":[]}
 
 ## Top menubar options
 menu_butts = [['File', ['New', 'Open', 'Save', 'Exit', ]], ['Edit', ['Copy', '&Undo point', 'Resize Image', 'Change Canvas Size'], ],  ['Help', 'About...'], ]
@@ -134,15 +134,17 @@ def main():
             elif len(values["-FOLDER-"]) != 0:
                 
                 if ids is not None:
-                    graph.delete_figure(ids) ## delete the figure on the canvas if displaying a new one
-                
+                    # graph.delete_figure(ids) ## delete the figure on the canvas if displaying a new one
+                    graph.erase()
+                    
                 image, pil_image, filename, ids = func.disp_image(window, values, fnames, location=0)
                 window.refresh()
                 window["-COL-"].contents_changed()
                 
                 ## Tries to overlay points if the image has associated coordinate file
                 x_overlay, y_overlay, id_overlay, pts_fname = func.autoload_pts(values, graph, filename, coord_dict["ID"],
-                                                                                coord_dict["X"], coord_dict["Y"])
+                                                                                             coord_dict["X"], coord_dict["Y"], coord_dict["R"],
+                                                                                             coord_dict["theta"])
                 
                 ## ids, x and y coordinates already added to dictionary
                 feature_nums = np.arange(1,len(x_overlay))
@@ -155,13 +157,14 @@ def main():
         if event == "-NEXT-":
             
             if ids is not None:
-                graph.delete_figure(ids) ## delete the figure on the canvas if displaying a new one
+                # graph.delete_figure(ids) ## delete the figure on the canvas if displaying a new one
+                graph.erase()
                 
             image, pil_image, filename, ids = func.disp_image(window, values, fnames, location=1)
             window.refresh()
             window["-COL-"].contents_changed()
             
-            x_overlay, y_overlay, id_overlay, pts_fname = func.autoload_pts(values, graph, filename, coord_dict["ID"],
+            x_overlay, y_overlay, id_overlay, pts_fname, pmts, bolts = func.autoload_pts(values, graph, filename, coord_dict["ID"],
                                                                             coord_dict["X"], coord_dict["Y"])
             
             feature_nums = np.arange(1,len(x_overlay))
@@ -173,13 +176,14 @@ def main():
         if event == "-PREV-":
             
             if ids is not None:
-                graph.delete_figure(ids) ## delete the figure on the canvas if displaying a new one
-            
+                # graph.delete_figure(ids) ## delete the figure on the canvas if displaying a new one
+                graph.erase()
+                
             image, pil_image, filename, ids = func.disp_image(window, values, fnames, location=-1)
             window.refresh()
             window["-COL-"].contents_changed()
             
-            x_overlay, y_overlay, id_overlay, pts_fname = func.autoload_pts(values, graph, filename, coord_dict["ID"],
+            x_overlay, y_overlay, id_overlay, pts_fname, pmts, bolts = func.autoload_pts(values, graph, filename, coord_dict["ID"],
                                                                             coord_dict["X"], coord_dict["Y"])
             
             feature_nums = np.arange(1,len(x_overlay)+1)
@@ -271,6 +275,8 @@ def main():
                     print("Found point to replace, ", i)
                     coord_dict["X"][i] = end_pt[0]
                     coord_dict["Y"][i] = end_pt[1]
+                    # coord_dict["R"][i] = np.sqrt(end_pt[0]**2 + end_pt[1]**2)
+                    # coord_dict["theta"][i] = math.degrees(np.arctan(end_pt[0]))
                     print(f"The old coordinates were {start_pt}")
                     print(f"The new coordinates are {end_pt}")
                     break;
@@ -289,7 +295,7 @@ def main():
                 ## checks which pmt the bolt belongs to and returns ID of the PMT
                 ## along with the angle between the dynode and the bolt
                 
-                pmt_id, theta = func.bolt_labels(coord_dict, end_pt[0], end_pt[1])
+                pmt_id, theta, bolt_label = func.bolt_labels(coord_dict, end_pt[0], end_pt[1])
                 
                 ## was for feature counting with all manual labeling
                 # i+=1
@@ -345,7 +351,7 @@ def main():
             # func.save_element_as_file(column, annotate_fname)
             
         elif event == '-CSV-':
-            func.write_coords_to_csv(coord_dict, filename)
+            func.write_coords_to_csv(coord_dict, filename, values)
             
         elif event == '&Undo point':
             
@@ -364,20 +370,26 @@ def main():
                 pass
                     
         elif event == 'Change Canvas Size':
-            func.change_canvas_size(window, graph)
+            scale = input("Please enter a scale factor '##': ")
+            func.change_canvas_size(window, graph, scale)
             
         elif event == 'Resize Image':
             
             if ids is not None:
-                graph.delete_figure(ids) ## delete the figure on the canvas if displaying a new one
+                # graph.delete_figure(ids) ## removes only the image
+                graph.erase() ## removes all figures drawn on the graph
             
-            try:
-                new_size = ast.literal_eval(input("Please enter the image size '##, ##': "))
-                im_array = np.array(image, dtype=np.uint8)
-                data = func.resize(im_array, new_size)
-                graph.draw_image(data=data, location=(0,var.height))
-            except:
-                sg.popup_ok("Please check your size input format. E.g. ##, ##")
+            # try:
+            scale = input("Please enter a scale factor '##': ")
+            im_array = np.array(image, dtype=np.uint8)
+            data = func.resize(window, im_array, scale)
+            func.change_canvas_size(window, graph, scale)
+            graph.draw_image(data=data, location=(0,var.height))
+            func.redraw_pts(coord_dict, graph, scale)
+            
+                
+            # except:
+            #     sg.popup_ok("Please check your size input format. E.g. ##, ##")
                 
     window.close() ## For when the user presses the Exit button
     
