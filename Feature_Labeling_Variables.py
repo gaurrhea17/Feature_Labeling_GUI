@@ -11,5 +11,6 @@ both the functions and GUI modules for the feature labeling GUI.
 width, height = 4000, 2750 ## sizes of images
 column_width = 1000
 column_height = 750
+invert_y = True
 
 global value_file, graph
