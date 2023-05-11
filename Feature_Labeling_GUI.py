@@ -34,7 +34,7 @@ sg.theme('GreenTan') ## setting window colour scheme
 sg.set_options(dpi_awareness=True)
 
 ## Dictionary with necessary lists of coordinates
-coord_dict = {"Img": [], "FN": [], "ID": [], "X":[], "Y":[], "R":[], "theta":[]}
+coord_dict = {"Img": [], "ID": [], "X":[], "Y":[], "R":[], "theta":[]}
 
 ## Top menubar options
 menu_butts = [['File', ['New', 'Open', 'Save', 'Exit', ]], ['Edit', ['Copy', '&Undo point', 'Resize Image', 'Change Canvas Size'], ],  ['Help', 'About...'], ]
@@ -104,6 +104,7 @@ def main():
     
     window = sg.Window("Image Labeling GUI", layout, resizable=True) ## putting together the user interface
     
+    
     location = 0
     
     graph = window["-GRAPH-"] 
@@ -115,6 +116,7 @@ def main():
     
     while True:
         event, values = window.read()
+        print("Events", event, "values", values)
         ## 'event' is the key string of whichever element user interacts with
         ## 'values' contains Python dictionary that maps element key to a value
         
@@ -143,12 +145,10 @@ def main():
                 
                 ## Tries to overlay points if the image has associated coordinate file
                 x_overlay, y_overlay, id_overlay, pts_fname = func.autoload_pts(values, graph, filename, coord_dict["ID"],
-                                                                                             coord_dict["X"], coord_dict["Y"], coord_dict["R"],
+                                                                    coord_dict["X"], coord_dict["Y"], coord_dict["R"],
                                                                                              coord_dict["theta"])
-                
                 ## ids, x and y coordinates already added to dictionary
-                feature_nums = np.arange(1,len(x_overlay))
-                coord_dict["FN"].append(feature_nums)
+                ## can add feature number here but for now, no use
                 coord_dict["Img"].append(filename)
                 
                 if filename not in coord_dict["Img"]:
@@ -167,8 +167,6 @@ def main():
             x_overlay, y_overlay, id_overlay, pts_fname, pmts, bolts = func.autoload_pts(values, graph, filename, coord_dict["ID"],
                                                                             coord_dict["X"], coord_dict["Y"])
             
-            feature_nums = np.arange(1,len(x_overlay))
-            coord_dict["FN"].append(feature_nums)
             coord_dict["Img"].append(filename)
             
             if filename not in coord_dict["Img"]:
@@ -186,8 +184,6 @@ def main():
             x_overlay, y_overlay, id_overlay, pts_fname, pmts, bolts = func.autoload_pts(values, graph, filename, coord_dict["ID"],
                                                                             coord_dict["X"], coord_dict["Y"])
             
-            feature_nums = np.arange(1,len(x_overlay)+1)
-            coord_dict["FN"].append(feature_nums)
             coord_dict["Img"].append(filename)
             
             if filename not in coord_dict["Img"]:
@@ -204,46 +200,39 @@ def main():
             x, y = values["-GRAPH-"]
             buffer_list.append(values["-GRAPH-"])
             if not dragging:
-                start_pt = (x, y)
                 dragging = True
                 drag_figures = graph.get_figures_at_location((x,y))
-
-                print("Drag figures info", drag_figures, len(drag_figures))        
-                lastxy = x,y
-            else:
-                end_pt = (x,y)
-            if prior_rect:
-                graph.delete_figure(prior_rect)
+                # curr_x, curr_y, start_pt = func.get_curr_coords(graph, drag_figures)
+                for fig in drag_figures:
+                    current_coords = graph.get_bounding_box(fig)
+                    curr_x = (current_coords[0][0] + current_coords[1][0])/2
+                    curr_y = (current_coords[0][1] + current_coords[1][1])/2
+                    start_point = curr_x, curr_y
                 
-            delta_x, delta_y = x - lastxy[0], y - lastxy[1] 
-            
-            lastxy = (x, y)
-            
+                print("Drag figures info", drag_figures, len(drag_figures))        
+            else:
+                end_pt = x, y
+                for fig in drag_figures:
+                    current_coords = graph.get_bounding_box(fig)
+                    curr_x = (current_coords[0][0] + current_coords[1][0])/2
+                    curr_y = (current_coords[0][1] + current_coords[1][1])/2
+                    end_pt = curr_x, curr_y
+                
             if None not in (start_pt, end_pt):
                 if values['-MOVE-']:
                     if len(drag_figures)==1:
                         pass;
                     elif len(drag_figures)>1: ## removing the background image from the tuple of objects that can be dragged
                         for fig in drag_figures[1:]:
-                            graph.move_figure(fig, delta_x, delta_y)
+                            graph.move_figure(fig, x - curr_x, y - curr_y)
                             graph.update()
-                # elif values['-RECT-']:
-                #     prior_rect = graph.draw_rectangle(start_pt, end_pt,fill_color='green', line_color='red')
-                # elif values['-CIRCLE-']:
-                #     prior_rect = graph.draw_circle(start_pt, end_pt[0]-start_pt[0], fill_color='red', line_color='green')
-                # elif values['-LINE-']:
-                #     prior_rect = graph.draw_line(start_pt, end_pt, width=4)
-                elif values['-PMT_POINT-']:
-                   graph.draw_point((x,y), color = 'red', size=8)
-                elif values['-BOLT_POINT-']:
-                    graph.draw_point((x,y), color = 'yellow', size =8)
                 elif values['-ERASE-']:
                     for fig in drag_figures:
                         graph.delete_figure(fig)
                 elif values['-CLEAR-']:
                     graph.erase()
-                elif values['-MOVEALL-']:
-                    graph.move(delta_x, delta_y)
+                # elif values['-MOVEALL-']:
+                #     graph.move(delta_x, delta_y)
                 elif values['-FRONT-']:
                     for fig in drag_figures:
                         graph.bring_figure_to_front(fig)
@@ -253,14 +242,13 @@ def main():
             window["-INFO-"].update(value=f"Mouse {values['-GRAPH-']}")
         
         
-        elif event.endswith('+UP'):
-            window["-INFO-"].update(value=f'Made point at ({end_pt[0]}, {end_pt[1]})')
+        elif event.endswith('+UP') and values['-MOVE-']:
+            window["-INFO-"].update(value=f"Moved point from {start_pt} to {end_pt}")
+            start_pt, end_pt = None, None  # enable making a new point
+            dragging = False
+        elif event.endswith('+UP') and not values["-MOVE-"]:
             
-            # if start_pt[0] not in coord_dict["X"] and start_pt[1] not in coord_dict["Y"]: ## if the point is not already there, then add it
-            #     coord_dict["Img"].append(filename)
-            #     print(coord_dict["FN"][-1])
-            #     coord_dict["X"].append(start_pt[0])
-            #     coord_dict["Y"].append(start_pt[1])
+            window["-INFO-"].update(value=f'Made point at ({end_pt[0]}, {end_pt[1]})')
             
             
             ## check for the points previous coordinates in the dictionary. If they exist, update them
@@ -284,13 +272,20 @@ def main():
             # print(coord_dict)
             
             if values["-PMT_POINT-"]:
+                ## drawing PMT point
+                graph.draw_point((x,y), color = 'red', size=8)
+                
                 pmt_id = input("Please enter PMT ID.")
                 coord_dict["ID"].append(pmt_id)
+                coord_dict["X"].append(x)
+                coord_dict["Y"].append(y)
                 
                 i+=1
                 j=0
             
             if values["-BOLT_POINT-"]:
+                ## drawing bolt point
+                graph.draw_point((x,y), color = 'yellow', size =8)
                 
                 ## checks which pmt the bolt belongs to and returns ID of the PMT
                 ## along with the angle between the dynode and the bolt

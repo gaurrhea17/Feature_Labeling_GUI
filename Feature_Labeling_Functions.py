@@ -141,6 +141,14 @@ def redraw_pts(dict_name, graph, scale):
         else:
            graph.draw_point((float(dict_name["X"][i])*scale, float(dict_name["Y"][i])*scale), color = 'yellow', size = 8)
     graph.update()
+    
+def get_curr_coords(graph, drag_figures):
+    for fig in drag_figures[1:]:
+        current_coords = graph.get_bounding_box(fig)
+        curr_x = (current_coords[0][0] + current_coords[1][0])/2
+        curr_y = (current_coords[0][1] + current_coords[1][1])/2
+        point = curr_x, curr_y
+        return curr_x, curr_y, point
 
 def resize(window, array, scale):
     
@@ -288,7 +296,7 @@ def save_element_as_file(element, filename):
 def autoload_pts(values, graph, filename, id_dict, x_dict, y_dict, r_dict, t_dict):
     try:
     
-        pts_dir = os.path.join(os.path.dirname(values["-FOLDER-"]), 'points')
+        pts_dir = os.path.dirname(values["-FOLDER-"])+r'\points'
         buffer_pmts = []
         pts_file = os.path.basename(filename).split('.')[0]
         pts_fname = os.path.join(pts_dir, pts_file) + ".txt" 
@@ -323,7 +331,6 @@ def autoload_pts(values, graph, filename, id_dict, x_dict, y_dict, r_dict, t_dic
                 buffer_x, buffer_y = x_dict[index], y_dict[index]
                 r_dict.append(np.sqrt((float(x_overlay[i]) - buffer_x)**2 + (y_point - buffer_y)**2))
                 t_dict.append(angle_to((float(x_overlay[i]), y_point), (buffer_x, buffer_y))) 
-                # t_dict.append(math.degrees(np.arctan((float(x_overlay[i]) - buffer_x)/(y_point - buffer_y))))
             else:
                 continue
             
@@ -372,9 +379,9 @@ def bolt_labels(dict_name, bolt_x, bolt_y):
     
     pmt_id = np.where(np.array(buffer_r) == min(buffer_r))[0][0] +1 ## PMT number where distance between bolt and PMT is minimum
     # print(f"Calculated distance to {len(buffer_r)} PMTs")
-    print("ID where min. distance between bolt and dynode :", pmt_id)
+    print("PMT number where min. distance between bolt and dynode :", pmt_id)
     
-    theta = angle_to((0,0), (buffer_x[pmt_id-1], buffer_y[pmt_id-1]))
+    theta = angle_to((bolt_x, bolt_y), (bolt_x - buffer_x[pmt_id-1], bolt_y - buffer_y[pmt_id-1]))
     # theta = math.degrees(np.arctan(buffer_x[pmt_id-1]/buffer_y[pmt_id-1])) ## angle between dynode and bolt
     print(f"Angle between PMT and bolt {theta}")
     # print("Length of dictionary, ", len(dict_name["ID"]))
