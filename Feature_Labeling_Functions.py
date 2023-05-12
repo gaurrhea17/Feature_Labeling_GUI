@@ -59,7 +59,7 @@ def jpg_to_png(jpg_path):
     
     # Save the converted image as .png format to the specified directory
     png_dir = os.path.dirname(jpg_path)
-    png_path = rf"{png_dir}\{file_name}.png"
+    png_path = os.path.join(png_dir, file_name)+".png"
     img_rgba.save(png_path, format="png")
     
     return png_path
@@ -265,7 +265,7 @@ def opencv_overlay(pic_file, coords_file, annotate_fname, base):
     
     annotate_fname = str(pic_file)
     cv.namedWindow(annotate_fname, cv.WINDOW_NORMAL)
-    img2 = cv.resize(img_circle, (4000,2750)) ## cropped original (4000, 3000) to remove watermark
+    img2 = cv.resize(img_circle, (var.width,var.height)) ## cropped original (4000, 3000) to remove watermark
     for i in range(len(x)):
         if str(ids[i]).endswith('00'):
             cv.circle(img2, (int(float(x[i])), int(float(y[i]))), radius=0, color=(0,0,255), thickness=10)
@@ -303,19 +303,25 @@ def autoload_pts(values, graph, filename, id_dict, x_dict, y_dict, r_dict, t_dic
         print(pts_fname)
         x_overlay, y_overlay, id_overlay = overlay_pts(pts_fname) ## overlaying coordinates
         print("Got overlay coords")
+        
         for i in range(len(x_overlay)):
+            
+            y_point = float(y_overlay[i])
+            if var.invert_y:
+                y_point = var.height - y_point
+            
             if str(id_overlay[i]).endswith('00'):
-                graph.draw_point((float(x_overlay[i]), 2750 - float(y_overlay[i])), color = 'red', size=10)
+                graph.draw_point((float(x_overlay[i]), y_point), color = 'red', size=10)
                 buffer_pmts.append(str(id_overlay[i]))
                 print("Drew a PMT and appending a buffer PMT", buffer_pmts)
                 
             else:
-                graph.draw_point((float(x_overlay[i]), 2750 - float(y_overlay[i])), color = 'yellow', size = 8)
+                graph.draw_point((float(x_overlay[i]), y_point), color = 'yellow', size = 8)
                 print("Drew a bolt")
                 
             id_dict.append(str(id_overlay[i]))
             x_dict.append(float(x_overlay[i]))
-            y_dict.append(2750 - float(y_overlay[i]))
+            y_dict.append(y_point)
             
             if not str(id_overlay[i]).endswith('00'):
                 index = [j for j, s in enumerate(id_dict) if str(id_overlay[i])[:5] in s][0]
@@ -323,9 +329,8 @@ def autoload_pts(values, graph, filename, id_dict, x_dict, y_dict, r_dict, t_dic
                 print("Matching bolt ", str(id_overlay[i]))
                 
                 buffer_x, buffer_y = x_dict[index], y_dict[index]
-                print(buffer_x, buffer_y)
-                r_dict.append(np.sqrt((float(x_overlay[i]) - buffer_x)**2 + ((2750 - float(y_overlay[i])) - buffer_y)**2))
-                t_dict.append(angle_to((float(x_overlay[i]), 2750-float(y_overlay[i])), (buffer_x, buffer_y)))             
+                r_dict.append(np.sqrt((float(x_overlay[i]) - buffer_x)**2 + (y_point - buffer_y)**2))
+                t_dict.append(angle_to((float(x_overlay[i]), y_point), (buffer_x, buffer_y))) 
             else:
                 continue
             
@@ -360,8 +365,10 @@ def bolt_labels(dict_name, bolt_x, bolt_y):
     buffer_x = []
     buffer_y = []
     buffer_r = []
-    suffix = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', 
-              '20', '21', '22', '23', '24']
+    suffix = []
+    for i in range(1, 24): # Bolt labels
+        suffix.append('%02d' % i)
+
     for i in range(len(dict_name["ID"])):
         if str(dict_name["ID"][i]).endswith('00'):
             x = bolt_x - float(dict_name["X"][i])
@@ -370,6 +377,7 @@ def bolt_labels(dict_name, bolt_x, bolt_y):
             buffer_x.append(x)
             buffer_y.append(y)
     
+    # This needs to be generalized so not assuming +1
     pmt_id = np.where(np.array(buffer_r) == min(buffer_r))[0][0] +1 ## PMT number where distance between bolt and PMT is minimum
     # print(f"Calculated distance to {len(buffer_r)} PMTs")
     print("PMT number where min. distance between bolt and dynode :", pmt_id)
