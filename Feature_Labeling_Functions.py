@@ -305,7 +305,7 @@ def autoload_pts(values, graph, filename, name):
                 
             coord_dict["ID"].append(str(id_overlay[i]))
             coord_dict["X"].append(float(x_overlay[i]))
-            coord_dict["Y"].append(2750 - float(y_overlay[i]))
+            coord_dict["Y"].append(y_point)
             
             if not str(id_overlay[i]).endswith('00'):
                 index = [j for j, s in enumerate(coord_dict["ID"]) if str(id_overlay[i])[:5] in s][0]
@@ -314,8 +314,8 @@ def autoload_pts(values, graph, filename, name):
                 
                 buffer_x, buffer_y = coord_dict["X"][index], coord_dict["Y"][index]
                 print(buffer_x, buffer_y)
-                coord_dict["R"][i] = np.sqrt((float(x_overlay[i]) - buffer_x)**2 + ((2750 - float(y_overlay[i])) - buffer_y)**2)
-                coord_dict["theta"][i] = angle_to((buffer_x, buffer_y), (float(x_overlay[i]), 2750-float(y_overlay[i])))
+                coord_dict["R"][i] = np.sqrt((float(x_overlay[i]) - buffer_x)**2 + (y_point - buffer_y)**2)
+                coord_dict["theta"][i] = angle_to((buffer_x, buffer_y), (float(x_overlay[i]), y_point))
 
             else:
                 continue
@@ -337,8 +337,6 @@ def reverseEnum(data: list):
     
 def write_coords_to_csv(dict_name, filename, values):
     ## Open .csv file to write feature coordinates to; w+ means open will truncate the file
-    
-    # path = os.path.dirname(os.path.join(values["-FOLDER-"])+'/Annotation_Coordinates/'+os.path.basename(os.path.splitext(filename)[0])+".csv"
     
     part1 = os.path.join(os.path.dirname(values["-FOLDER-"]),'Annotation_Coordinates')
     part2 = os.path.basename(os.path.splitext(filename)[0])+".csv"
@@ -363,8 +361,6 @@ def bolt_labels(dict_name, bolt_x, bolt_y, name):
     suffix = []
     for i in range(1, 24): # Bolt labelsM
         suffix.append('%02d' % i)
-    #suffix = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', 
-    #          '20', '21', '22', '23', '24']
     
     ## calculate the distance from bolt in question to each PMT
     for i in range(len(dict_name["ID"])):
