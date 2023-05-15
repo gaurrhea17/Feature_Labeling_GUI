@@ -33,9 +33,6 @@ sys.path.append(r'C:\Users\gaurr\OneDrive - TRIUMF\Super-K\Reconstruction\Photog
 sg.theme('GreenTan') ## setting window colour scheme
 sg.set_options(dpi_awareness=True)
 
-## Dictionary with necessary lists of coordinates
-coord_dict = {"Img": [], "ID": [], "X":[], "Y":[], "R":[], "theta":[]}
-
 ## Top menubar options
 menu_butts = [['File', ['New', 'Open', 'Save', 'Exit', ]], ['Edit', ['Copy', '&Undo point', 'Resize Image', 'Change Canvas Size'], ],  ['Help', 'About...'], ]
 menubar = [[sg.Menu(menu_butts)],]
@@ -51,7 +48,6 @@ file_list_col = [
     [sg.Listbox(values=[], enable_events=True, size=(40,20), key="-FILE LIST-")
      ], ## displays a list of paths to the images you can choose from to display
     ]
-
 
 mov_col = [[sg.T('Choose what you want to do:', enable_events=True)],
            # [sg.R('Draw Rectangles', 1, key='-RECT-', enable_events=True)],
@@ -82,10 +78,12 @@ image_viewer_col_2 = [
 post_process_col= [
     [sg.Column(mov_col)],
     [sg.Button("Save Annotations", size = (15,1), key="-SAVE-")],
+    [sg.Button("Plot Labels", size = (15,1), key="-PLOT_LABEL-"), sg.Button("Remove Labels", size = (15,1), key="-ERASE_LABEL-")],
     [sg.Button("Write CSV", size = (15,1), key="-CSV-")],
     [sg.Button("Reconstruct", size=(15,1), key="-RECON-")],
     # [sg.Slider(range=(1,10), orientation='h', resolution=.1, default_value=1, key='-ZOOM-', enable_events=True),],
     [sg.Button('Zoom In'), sg.Button('Zoom Out')],
+    [sg.Button("Shift R"), sg.Button("Shift L")],
     [
      sg.Text("Choose a file of overlay points: "),
      sg.In(size=(15,1), enable_events =True, key="-OVERLAY-"),
@@ -108,12 +106,13 @@ def main():
     location = 0
     
     graph = window["-GRAPH-"] 
+    
+    name = input("Please enter your initials. ")
 
     dragging = False
-    start_pt = end_pt = prior_rect = None
+    start_pt = end_pt = None
     ids = None ## used to specify which figure on sg.Graph to delete
-    buffer_list = [] ## list to hold coordinates for points being dragged
-    
+        
     while True:
         event, values = window.read()
         print("Events", event, "values", values)
@@ -144,9 +143,8 @@ def main():
                 window["-COL-"].contents_changed()
                 
                 ## Tries to overlay points if the image has associated coordinate file
-                x_overlay, y_overlay, id_overlay, pts_fname = func.autoload_pts(values, graph, filename, coord_dict["ID"],
-                                                                    coord_dict["X"], coord_dict["Y"], coord_dict["R"],
-                                                                                             coord_dict["theta"])
+                x_overlay, y_overlay, id_overlay, pts_fname, coord_dict = func.autoload_pts(values, graph, filename, name)
+                print("Length of polar coordinate lists", len(coord_dict["R"]))
                 ## ids, x and y coordinates already added to dictionary
                 ## can add feature number here but for now, no use
                 coord_dict["Img"].append(filename)
@@ -164,10 +162,10 @@ def main():
             window.refresh()
             window["-COL-"].contents_changed()
             
-            x_overlay, y_overlay, id_overlay, pts_fname, pmts, bolts = func.autoload_pts(values, graph, filename, coord_dict["ID"],
-                                                                            coord_dict["X"], coord_dict["Y"])
+            x_overlay, y_overlay, id_overlay, pts_fname, coord_dict = func.autoload_pts(values, graph, filename, name)
             
             coord_dict["Img"].append(filename)
+            coord_dict["Name"].append(input("Please enter your initials."))
             
             if filename not in coord_dict["Img"]:
                 i=1 ## counter for feature number
@@ -181,8 +179,7 @@ def main():
             window.refresh()
             window["-COL-"].contents_changed()
             
-            x_overlay, y_overlay, id_overlay, pts_fname, pmts, bolts = func.autoload_pts(values, graph, filename, coord_dict["ID"],
-                                                                            coord_dict["X"], coord_dict["Y"])
+            x_overlay, y_overlay, id_overlay, pts_fname, coord_dict = func.autoload_pts(values, graph, filename, name)
             
             coord_dict["Img"].append(filename)
             
@@ -198,21 +195,18 @@ def main():
         
         if event == "-GRAPH-":
             x, y = values["-GRAPH-"]
-            buffer_list.append(values["-GRAPH-"])
             if not dragging:
                 dragging = True
                 drag_figures = graph.get_figures_at_location((x,y))
-                # curr_x, curr_y, start_pt = func.get_curr_coords(graph, drag_figures)
+
                 for fig in drag_figures:
                     current_coords = graph.get_bounding_box(fig)
                     curr_x = (current_coords[0][0] + current_coords[1][0])/2
                     curr_y = (current_coords[0][1] + current_coords[1][1])/2
-                    start_point = curr_x, curr_y
-                
-                print("Drag figures info", drag_figures, len(drag_figures))        
+                    start_pt = curr_x, curr_y
             else:
                 end_pt = x, y
-                for fig in drag_figures:
+                for fig in drag_figures[1:]:
                     current_coords = graph.get_bounding_box(fig)
                     curr_x = (current_coords[0][0] + current_coords[1][0])/2
                     curr_y = (current_coords[0][1] + current_coords[1][1])/2
@@ -224,6 +218,9 @@ def main():
                         pass;
                     elif len(drag_figures)>1: ## removing the background image from the tuple of objects that can be dragged
                         for fig in drag_figures[1:]:
+                            current_coords = graph.get_bounding_box(fig)
+                            curr_x = (current_coords[0][0] + current_coords[1][0])/2
+                            curr_y = (current_coords[0][1] + current_coords[1][1])/2
                             graph.move_figure(fig, x - curr_x, y - curr_y)
                             graph.update()
                 elif values['-ERASE-']:
@@ -244,32 +241,24 @@ def main():
         
         elif event.endswith('+UP') and values['-MOVE-']:
             window["-INFO-"].update(value=f"Moved point from {start_pt} to {end_pt}")
+            
+            for i in range(len(coord_dict["X"])):
+                if coord_dict["X"][i] == start_pt[0] and coord_dict["Y"][i] == start_pt[1]:
+                    coord_dict["X"][i] = end_pt[0]
+                    coord_dict["Y"][i] = end_pt[1]
+                    for j, d in func.reverseEnum(coord_dict["ID"]):
+                        if str(d)[:5] == str(coord_dict["ID"][i])[:5] and str(d).endswith('00'):
+                            pmt_x, pmt_y = coord_dict["X"][j], coord_dict["Y"][j]
+                            coord_dict["R"][i] = np.sqrt((coord_dict["X"][i] - pmt_x)**2 + (coord_dict["Y"][i] - pmt_y)**2)
+                            coord_dict["theta"][i] = func.angle_to((pmt_x, pmt_y), (coord_dict["X"][i], coord_dict["Y"][i]))
+                    
             start_pt, end_pt = None, None  # enable making a new point
             dragging = False
-        elif event.endswith('+UP') and not values["-MOVE-"]:
+            
+        elif event.endswith('+UP') and not values["-MOVE-"]: ## Clicked and made a point
             
             window["-INFO-"].update(value=f'Made point at ({end_pt[0]}, {end_pt[1]})')
             
-            
-            ## check for the points previous coordinates in the dictionary. If they exist, update them
-            for i in range(len(coord_dict["X"])):
-                x_max, x_min = coord_dict["X"][i]+10, coord_dict["X"][i] - 10
-                y_max, y_min = coord_dict["Y"][i]+10, coord_dict["Y"][i] - 10
-                
-                
-                ## checks range of points within +/- 10 pixels due to click uncertainty
-                if start_pt[0] < x_max and start_pt [0] > x_min and start_pt[1] < y_max and start_pt[1] > y_min:
-                                     
-                    print("Found point to replace, ", i)
-                    coord_dict["X"][i] = end_pt[0]
-                    coord_dict["Y"][i] = end_pt[1]
-                    # coord_dict["R"][i] = np.sqrt(end_pt[0]**2 + end_pt[1]**2)
-                    # coord_dict["theta"][i] = math.degrees(np.arctan(end_pt[0]))
-                    print(f"The old coordinates were {start_pt}")
-                    print(f"The new coordinates are {end_pt}")
-                    break;
-                    
-            # print(coord_dict)
             
             if values["-PMT_POINT-"]:
                 ## drawing PMT point
@@ -277,34 +266,29 @@ def main():
                 
                 pmt_id = input("Please enter PMT ID.")
                 coord_dict["ID"].append(pmt_id)
-                coord_dict["X"].append(x)
-                coord_dict["Y"].append(y)
+                coord_dict["X"].append(end_pt[0])
+                coord_dict["Y"].append(end_pt[1])
+                coord_dict["Name"].append(name)
                 
                 i+=1
                 j=0
             
             if values["-BOLT_POINT-"]:
-                ## drawing bolt point
-                graph.draw_point((x,y), color = 'yellow', size =8)
-                
-                ## checks which pmt the bolt belongs to and returns ID of the PMT
-                ## along with the angle between the dynode and the bolt
-                
-                pmt_id, theta, bolt_label = func.bolt_labels(coord_dict, end_pt[0], end_pt[1])
-                
-                ## was for feature counting with all manual labeling
-                # i+=1
-                # j+=1
-                # if j == 25:
-                #     j=0
-            
-            # func.write_coords_to_csv(coord_dict, 'test.csv')
-            
+                try: ## drawing bolt point
+                    new_bolt = graph.draw_point((x,y), color = 'yellow', size =8)
+                    
+                    ## checks which pmt the bolt belongs to and returns ID of the PMT
+                    ## along with the angle between the dynode and the bolt
+                    
+                    pmt_id, theta, bolt_label = func.bolt_labels(coord_dict, end_pt[0], end_pt[1], name)
+                    print("You just added a bolt ", bolt_label)
+                except Exception as e:
+                    print(e)
+                    print("Your last point could not be added. Please try again.")
+                    graph.delete_figure(new_bolt)
+                    
             start_pt, end_pt = None, None  # enable making a new point
             dragging = False
-            prior_rect = None
-            buffer_list = []
-            print("Dragging done. Buffer list: ", buffer_list)
             
             
         elif event == 'Erase item':
@@ -316,6 +300,8 @@ def main():
                     for figure in delete_figure[1:]:
                         graph.delete_figure(figure)
         
+        elif event.endswith('+MOTION+'):
+            window["-INFO-"].update(value=f"Mouse freely moving {values['-GRAPH-']}")
 
 ## =========================== Overlaying known coordinates =======================        
 
@@ -345,9 +331,22 @@ def main():
             annotate_fname = str(dir_name)+r"/annotated_"+str(base)
             # func.save_element_as_file(column, annotate_fname)
             
-        elif event == '-CSV-':
-            func.write_coords_to_csv(coord_dict, filename, values)
+        elif event == '-PLOT_LABEL-':
+            pmt_labels, bolt_labels = func.plot_labels(coord_dict, graph)
             
+        elif event == '-ERASE_LABEL-':
+            func.erase_labels(graph, pmt_labels, bolt_labels)
+        
+        elif event == '-CSV-':
+            try:
+                func.write_coords_to_csv(coord_dict, filename, values)
+                print("Annotations saved!")
+            except:
+                print("Did not save. Check that the file is not open.")
+            
+        # elif event == 'Shift R':
+            
+        
         elif event == '&Undo point':
             
             try:
@@ -389,6 +388,9 @@ def main():
     window.close() ## For when the user presses the Exit button
     
 main()
+
+
+#%%
 
 
 #%% Trying extra programs

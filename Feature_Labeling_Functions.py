@@ -59,7 +59,7 @@ def jpg_to_png(jpg_path):
     
     # Save the converted image as .png format to the specified directory
     png_dir = os.path.dirname(jpg_path)
-    png_path = os.path.join(png_dir, file_name)+".png"
+    png_path = os.path.join(png_dir, filename)+".png"
     img_rgba.save(png_path, format="png")
     
     return png_path
@@ -254,28 +254,6 @@ def overlay_pts(filename):
     return x_coords, y_coords, pmt_ids
 
 
-def opencv_overlay(pic_file, coords_file, annotate_fname, base):
-    
-    """ This function can be used to open images using OpenCV and overlay the labeled points. This will not
-    allow the user to move the points and should only be used to view and save images with labels as .png files."""
-    
-    image = cv.imread(pic_file)
-    x, y, ids = overlay_pts(coords_file)
-    img_circle = image.copy()
-    
-    annotate_fname = str(pic_file)
-    cv.namedWindow(annotate_fname, cv.WINDOW_NORMAL)
-    img2 = cv.resize(img_circle, (var.width,var.height)) ## cropped original (4000, 3000) to remove watermark
-    for i in range(len(x)):
-        if str(ids[i]).endswith('00'):
-            cv.circle(img2, (int(float(x[i])), int(float(y[i]))), radius=0, color=(0,0,255), thickness=10)
-        else:
-            cv.circle(img2, (int(float(x[i])), int(float(y[i]))), radius=0, color=(0,255,0), thickness=4)
-    
-    cv.imshow(annotate_fname, img2)
-    # cv.imwrite("With_points_"+str(base)+".png", img2)
-
-
 def save_element_as_file(element, filename):
     """
     Saves any element as an image file.  Element needs to have an underlying Widget available (almost if not all of them do)
@@ -289,11 +267,13 @@ def save_element_as_file(element, filename):
         grab = ImageGrab.grab(bbox=box)
         grab.save(filename)
         sg.popup_ok("Your image has been saved with annotations!")
-    except:
+    except Exception as e:
         sg.popup_ok("The file could not be saved.")
+        print(e)
 
 
-def autoload_pts(values, graph, filename, id_dict, x_dict, y_dict, r_dict, t_dict):
+def autoload_pts(values, graph, filename, name):
+    
     try:
     
         pts_dir = os.path.dirname(values["-FOLDER-"])+r'\points'
@@ -302,73 +282,87 @@ def autoload_pts(values, graph, filename, id_dict, x_dict, y_dict, r_dict, t_dic
         pts_fname = os.path.join(pts_dir, pts_file) + ".txt" 
         print(pts_fname)
         x_overlay, y_overlay, id_overlay = overlay_pts(pts_fname) ## overlaying coordinates
-        print("Got overlay coords")
         
+        ## Dictionary with necessary lists of coordinates
+        coord_dict = {"Img": [], "F":[None]*len(x_overlay), "ID": [], "X":[], "Y":[], "R": [None]*len(x_overlay), "theta": [None]*len(x_overlay), "Name": [name]*len(x_overlay)}
+        
+        print("Got overlay coords")
         for i in range(len(x_overlay)):
             
             y_point = float(y_overlay[i])
             if var.invert_y:
                 y_point = var.height - y_point
             
+            
             if str(id_overlay[i]).endswith('00'):
-                graph.draw_point((float(x_overlay[i]), y_point), color = 'red', size=10)
+                coord_dict["F"][i] = graph.draw_point((float(x_overlay[i]), y_point), color = 'red', size=10)
                 buffer_pmts.append(str(id_overlay[i]))
                 print("Drew a PMT and appending a buffer PMT", buffer_pmts)
                 
             else:
-                graph.draw_point((float(x_overlay[i]), y_point), color = 'yellow', size = 8)
+                coord_dict["F"][i] = graph.draw_point((float(x_overlay[i]), y_point), color = 'yellow', size = 8)
                 print("Drew a bolt")
                 
-            id_dict.append(str(id_overlay[i]))
-            x_dict.append(float(x_overlay[i]))
-            y_dict.append(y_point)
+            coord_dict["ID"].append(str(id_overlay[i]))
+            coord_dict["X"].append(float(x_overlay[i]))
+            coord_dict["Y"].append(y_point)
             
             if not str(id_overlay[i]).endswith('00'):
-                index = [j for j, s in enumerate(id_dict) if str(id_overlay[i])[:5] in s][0]
+                index = [j for j, s in enumerate(coord_dict["ID"]) if str(id_overlay[i])[:5] in s][0]
                 print("Index for matching PMT", index)
                 print("Matching bolt ", str(id_overlay[i]))
                 
-                buffer_x, buffer_y = x_dict[index], y_dict[index]
-                r_dict.append(np.sqrt((float(x_overlay[i]) - buffer_x)**2 + (y_point - buffer_y)**2))
-                t_dict.append(angle_to((float(x_overlay[i]), y_point), (buffer_x, buffer_y))) 
+                buffer_x, buffer_y = coord_dict["X"][index], coord_dict["Y"][index]
+                print(buffer_x, buffer_y)
+                coord_dict["R"][i] = np.sqrt((float(x_overlay[i]) - buffer_x)**2 + (y_point - buffer_y)**2)
+                coord_dict["theta"][i] = angle_to((buffer_x, buffer_y), (float(x_overlay[i]), y_point))
+
             else:
                 continue
             
-        return x_overlay, y_overlay, id_overlay, pts_fname
+        return x_overlay, y_overlay, id_overlay, pts_fname, coord_dict
         
-    except:
-        pass
+    except Exception as e:
+        print(e)
     
 def safe_open_w(path):
     ''' Open "path" for writing, creating any parent directories as needed.
     '''
     os.makedirs(os.path.dirname(path), exist_ok=True)
     return open(path, 'w+', newline='')
+
+def reverseEnum(data: list):
+    for i in range(len(data)-1, -1, -1):
+        yield (i, data[i])
     
 def write_coords_to_csv(dict_name, filename, values):
     ## Open .csv file to write feature coordinates to; w+ means open will truncate the file
     
-    path = os.path.dirname(values["-FOLDER-"])+'/Annotation_Coordinates/'+os.path.basename(os.path.splitext(filename)[0])+".csv"
+    part1 = os.path.join(os.path.dirname(values["-FOLDER-"]),'Annotation_Coordinates')
+    part2 = os.path.basename(os.path.splitext(filename)[0])+".csv"
+    path = os.path.join(part1, part2)
     
     csv_file = safe_open_w(path)
     df=pd.DataFrame.from_dict(dict_name, orient='index')
     df = df.transpose()
-    df.to_csv(csv_file, index=None, mode='w')
+    headers=["ID", "X", "Y", "Name"]
+    df.to_csv(csv_file, index=None, columns = headers, mode ='w', header = False)
     
 def angle_to(p1, p2, rotation = 90, clockwise=False):
-    angle = math.degrees(math.atan2(p2[1] - p1[1], p2[0] - p1[0])) - rotation
+    angle = math.degrees(math.atan2(p2[1] - p1[1], p2[0] - p1[0])) + rotation
     if not clockwise:
         angle = -angle
     return angle % 360
     
-def bolt_labels(dict_name, bolt_x, bolt_y):
+def bolt_labels(dict_name, bolt_x, bolt_y, name):
     buffer_x = []
     buffer_y = []
     buffer_r = []
     suffix = []
-    for i in range(1, 24): # Bolt labels
+    for i in range(1, 24): # Bolt labelsM
         suffix.append('%02d' % i)
-
+    
+    ## calculate the distance from bolt in question to each PMT
     for i in range(len(dict_name["ID"])):
         if str(dict_name["ID"][i]).endswith('00'):
             x = bolt_x - float(dict_name["X"][i])
@@ -377,11 +371,12 @@ def bolt_labels(dict_name, bolt_x, bolt_y):
             buffer_x.append(x)
             buffer_y.append(y)
     
-    # This needs to be generalized so not assuming +1
+    ## Find which PMT the bolt is closest to
     pmt_id = np.where(np.array(buffer_r) == min(buffer_r))[0][0] +1 ## PMT number where distance between bolt and PMT is minimum
     # print(f"Calculated distance to {len(buffer_r)} PMTs")
     print("PMT number where min. distance between bolt and dynode :", pmt_id)
     
+    ## calculate angle between PMT dynode and bolt
     theta = angle_to((bolt_x, bolt_y), (bolt_x - buffer_x[pmt_id-1], bolt_y - buffer_y[pmt_id-1]))
     # theta = math.degrees(np.arctan(buffer_x[pmt_id-1]/buffer_y[pmt_id-1])) ## angle between dynode and bolt
     print(f"Angle between PMT and bolt {theta}")
@@ -389,7 +384,7 @@ def bolt_labels(dict_name, bolt_x, bolt_y):
     
     buffer_theta = []
     buffer_theta.append(theta)
-    for i in range(len(dict_name["ID"])):
+    for i in range(len(dict_name["ID"])): ## tracking the remaining bolts associated with this PMT
         if dict_name["ID"][i].startswith("{:05d}".format(pmt_id)) and not dict_name["ID"][i].endswith("00"):
             pmt_name = str(dict_name["ID"][i])[:5]
             buffer_theta.append(dict_name["theta"][i])
@@ -397,27 +392,47 @@ def bolt_labels(dict_name, bolt_x, bolt_y):
     
     print("The number of bolts for this PMT is ", len(buffer_theta))
     buffer_theta = sorted(buffer_theta, key = lambda x:float(x)) ## organize the bolts for that PMT
-    print("organized buffer theta list", buffer_theta)
     index_theta = np.where(np.array(buffer_theta) == theta)[0][0] + 1 ## bolt label '-##'
     print("Bolt number will be ", index_theta)
-    # index_theta = "{:02d}".format(index_theta)
-    # print("Formatted bolt number ", index_theta)
     bolt_label = pmt_name+"-"+"{:02d}".format(index_theta) ## new bolt ID
     
     for i in range(len(dict_name["ID"])):
         if dict_name["ID"][i].startswith("{:05d}".format(pmt_id)) and dict_name["ID"][i].endswith("{:02d}".format(index_theta-1)):
             
-            # for j in range(len(suffix)):
-            #     if dict_name["ID"][i].endswith(suffix[j]) and float(suffix[j])<float(index_theta):
             dict_name["ID"].insert(i+1, bolt_label)
             dict_name["X"].insert(i+1, bolt_x)
             dict_name["Y"].insert(i+1, bolt_y)
             dict_name["R"].insert(i+1, min(buffer_r))
             dict_name["theta"].insert(i+1, theta)
+            dict_name["Name"].insert(i+1, name)
             
             return pmt_name, index_theta, bolt_label
     
+def plot_labels(dict_name, graph):
+    try: 
+        pmt_labels = [None]*len(dict_name["X"])
+        bolt_labels = [None]*len(dict_name["X"])
+        for i in range(len(dict_name["ID"])):
+            if dict_name["ID"][i].endswith("00"):
+                pmt_labels[i] = graph.DrawText(text=str(dict_name["ID"][i])[2:5], location=(dict_name["X"][i]-10, dict_name["Y"][i]-10), color='red')
+                # graph.DrawText(text=str(dict_name["ID"][i])[2:5], location=(dict_name["X"][i]-10, dict_name["Y"][i])-10, color='red')
+            else:
+                bolt_labels[i] = graph.DrawText(text=str(dict_name["ID"][i])[6:], location=(dict_name["X"][i]-10, dict_name["Y"][i]-10), color = 'yellow')
+                # graph.DrawText(text=str(dict_name["ID"][i])[6:], location=(dict_name["X"][i]-10, dict_name["Y"][i])-10, color = 'yellow')
+        return pmt_labels, bolt_labels
     
+    except Exception as e:
+        print(e)
+      
+        
+def erase_labels(graph, pmt_labels, bolt_labels):
+    try:
+        for i in range(len(pmt_labels)):
+            graph.delete_figure(pmt_labels[i])
+            graph.delete_figure(bolt_labels[i])
+    except Exception as e:
+        print(e)
+#%%  
     # for i in range(len(dict_name["ID"])):
     #     for j in range(len(suffix)):
     #         check_name = str(pmt_id)+'-'+suffix[j]
