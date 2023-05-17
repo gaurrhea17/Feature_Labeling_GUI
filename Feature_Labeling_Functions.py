@@ -325,6 +325,18 @@ def autoload_pts(values, graph, filename, name):
     except Exception as e:
         print(e)
     
+def del_figs(x, y, dict_name):
+    for i in range(len(dict_name["ID"])):
+        if x == dict_name["X"][i] and y == dict_name["Y"]:
+            del dict_name["ID"][i]
+            del dict_name["X"][i]
+            del dict_name["Y"][i]
+            del dict_name["R"][i]
+            del dict_name["theta"][i]
+            del dict_name["Name"][i]
+            del dict_name["Img"][i]
+            del dict_name["F"][i]
+
 def safe_open_w(path):
     ''' Open "path" for writing, creating any parent directories as needed.
     '''
@@ -339,14 +351,22 @@ def write_coords_to_csv(dict_name, filename, values):
     ## Open .csv file to write feature coordinates to; w+ means open will truncate the file
     
     part1 = os.path.join(os.path.dirname(values["-FOLDER-"]),'Annotation_Coordinates')
-    part2 = os.path.basename(os.path.splitext(filename)[0])+".csv"
-    path = os.path.join(part1, part2)
+    part2_csv = os.path.basename(os.path.splitext(filename)[0])+".csv"
+    part2_txt = os.path.basename(os.path.splitext(filename)[0])+".txt"
     
-    csv_file = safe_open_w(path)
+    path_csv = os.path.join(part1, part2_csv)
+    path_txt = os.path.join(part1, part2_txt)
+    
+    csv_file = safe_open_w(path_csv)
     df=pd.DataFrame.from_dict(dict_name, orient='index')
     df = df.transpose()
     headers=["ID", "X", "Y", "Name"]
-    df.to_csv(csv_file, index=None, columns = headers, mode ='w', header = False)
+    df.to_csv(csv_file, index=None, mode ='w')
+    
+    
+    with open(path_csv, 'r') as f_in, open(path_txt, 'w') as f_out:
+        content = f_in.read()
+        f_out.write(content, columns = headers, header = False)
     
 def angle_to(p1, p2, rotation = 90, clockwise=False):
     angle = math.degrees(math.atan2(p2[1] - p1[1], p2[0] - p1[0])) + rotation
@@ -359,7 +379,7 @@ def bolt_labels(dict_name, bolt_x, bolt_y, name):
     buffer_y = []
     buffer_r = []
     suffix = []
-    for i in range(1, 24): # Bolt labelsM
+    for i in range(1, 24): # Bolt labels
         suffix.append('%02d' % i)
     
     ## calculate the distance from bolt in question to each PMT
@@ -391,23 +411,27 @@ def bolt_labels(dict_name, bolt_x, bolt_y, name):
             print("Found a bolt for this PMT", dict_name["ID"][i])
     
     print("The number of bolts for this PMT is ", len(buffer_theta))
-    buffer_theta = sorted(buffer_theta, key = lambda x:float(x)) ## organize the bolts for that PMT
-    index_theta = np.where(np.array(buffer_theta) == theta)[0][0] + 1 ## bolt label '-##'
-    print("Bolt number will be ", index_theta)
-    bolt_label = pmt_name+"-"+"{:02d}".format(index_theta) ## new bolt ID
-    print("Printing bolt label ", bolt_label)
+    # buffer_theta = sorted(buffer_theta, key = lambda x:float(x)) ## organize the bolts for that PMT
+    # index_theta = np.where(np.array(buffer_theta) == theta)[0][0] + 1 ## bolt label '-##'
+    # print("Bolt number will be ", index_theta)
     
     for i in range(len(dict_name["ID"])):
-        if dict_name["ID"][i].startswith("{:05d}".format(pmt_id)) and dict_name["ID"][i].endswith("{:02d}".format(index_theta-1)):
-            print("Bolt after which you need to add new one ", dict_name["ID"][i])
-            dict_name["ID"].insert(i+1, bolt_label)
-            dict_name["X"].insert(i+1, bolt_x)
-            dict_name["Y"].insert(i+1, bolt_y)
-            dict_name["R"].insert(i+1, min(buffer_r))
-            dict_name["theta"].insert(i+1, theta)
-            dict_name["Name"].insert(i+1, name)
+        # if dict_name["ID"][i].startswith("{:05d}".format(pmt_id)) and dict_name["ID"][i].endswith("{:02d}".format(index_theta-1)):
+        if dict_name["ID"][i].startswith("{:05d}".format(pmt_id)) and dict_name["theta"][i] != None and dict_name["theta"][i] > theta:
+            bolt_num = "{:02d}".format(int(str(dict_name["ID"][i])[-2:])+1)
+            bolt_label = pmt_name+"-"+bolt_num
+            print("The bolt after the one you added is ", dict_name["ID"][i], f"at index, {i} with angle ", {dict_name["theta"][i]})
             
-            return pmt_name, index_theta, bolt_label
+            dict_name["ID"].insert(i-1, bolt_label)
+            dict_name["X"].insert(i-1, bolt_x)
+            dict_name["Y"].insert(i-1, bolt_y)
+            dict_name["R"].insert(i-1, min(buffer_r))
+            dict_name["theta"].insert(i-1, theta)
+            dict_name["Name"].insert(i-1, name)
+            print("Inserted your new bolt", bolt_label, f"at index, {i-1} with angle ",dict_name["theta"][i-1])
+            break;
+            
+    return pmt_name, bolt_label
     
 def plot_labels(dict_name, graph):
     try: 
