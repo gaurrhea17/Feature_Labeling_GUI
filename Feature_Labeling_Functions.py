@@ -388,17 +388,18 @@ def bolt_labels(dict_name, bolt_x, bolt_y, name):
         if dict_name["ID"][i].startswith("{:05d}".format(pmt_id)) and not dict_name["ID"][i].endswith("00"):
             pmt_name = str(dict_name["ID"][i])[:5]
             buffer_theta.append(dict_name["theta"][i])
-            print("Found a bolt for this PMT")
+            print("Found a bolt for this PMT", dict_name["ID"][i])
     
     print("The number of bolts for this PMT is ", len(buffer_theta))
     buffer_theta = sorted(buffer_theta, key = lambda x:float(x)) ## organize the bolts for that PMT
     index_theta = np.where(np.array(buffer_theta) == theta)[0][0] + 1 ## bolt label '-##'
     print("Bolt number will be ", index_theta)
     bolt_label = pmt_name+"-"+"{:02d}".format(index_theta) ## new bolt ID
+    print("Printing bolt label ", bolt_label)
     
     for i in range(len(dict_name["ID"])):
         if dict_name["ID"][i].startswith("{:05d}".format(pmt_id)) and dict_name["ID"][i].endswith("{:02d}".format(index_theta-1)):
-            
+            print("Bolt after which you need to add new one ", dict_name["ID"][i])
             dict_name["ID"].insert(i+1, bolt_label)
             dict_name["X"].insert(i+1, bolt_x)
             dict_name["Y"].insert(i+1, bolt_y)
