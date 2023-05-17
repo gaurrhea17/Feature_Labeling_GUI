@@ -110,11 +110,12 @@ def main():
     name = input("Please enter your initials. ")
 
     dragging = False
+    made_point = False
     start_pt = end_pt = None
     ids = None ## used to specify which figure on sg.Graph to delete
         
     while True:
-        event, values = window.read(timeout=100)
+        event, values = window.read()
         ## 'event' is the key string of whichever element user interacts with
         ## 'values' contains Python dictionary that maps element key to a value
         
@@ -129,8 +130,7 @@ def main():
             
             if len(values["-FOLDER-"]) == 0 : ## If user selected listbox before browsing folders
                 select_folder = sg.popup_ok("Please select a folder first.")
-            
-            
+                        
             elif len(values["-FOLDER-"]) != 0:
                 
                 if ids is not None:
@@ -151,13 +151,16 @@ def main():
                 if filename not in coord_dict["Img"]:
                     i=1 ## counter for feature number
         
-        if event == "-NEXT-":
+        if event == "-NEXT-" or event == "-PREV-":
             
             if ids is not None:
                 # graph.delete_figure(ids) ## delete the figure on the canvas if displaying a new one
                 graph.erase()
-                
-            image, pil_image, filename, ids = func.disp_image(window, values, fnames, location=1)
+            
+            location=1
+            if event == "-PREV-":
+                location=-1
+            image, pil_image, filename, ids = func.disp_image(window, values, fnames, location=location)
             window.refresh()
             window["-COL-"].contents_changed()
             
@@ -165,22 +168,6 @@ def main():
             
             coord_dict["Img"].append(filename)
             coord_dict["Name"].append(input("Please enter your initials."))
-            
-            if filename not in coord_dict["Img"]:
-                i=1 ## counter for feature number
-        if event == "-PREV-":
-            
-            if ids is not None:
-                # graph.delete_figure(ids) ## delete the figure on the canvas if displaying a new one
-                graph.erase()
-                
-            image, pil_image, filename, ids = func.disp_image(window, values, fnames, location=-1)
-            window.refresh()
-            window["-COL-"].contents_changed()
-            
-            x_overlay, y_overlay, id_overlay, pts_fname, coord_dict = func.autoload_pts(values, graph, filename, name)
-            
-            coord_dict["Img"].append(filename)
             
             if filename not in coord_dict["Img"]:
                 i=1 ## counter for feature number
@@ -193,120 +180,91 @@ def main():
             graph.set_cursor(cursor='left_ptr') 
         
         if event == "-GRAPH-":
+
             x, y = values["-GRAPH-"]
+            
             if not dragging:
                 dragging = True
                 drag_figures = graph.get_figures_at_location((x,y))
 
                 for fig in drag_figures:
-                    current_coords = graph.get_bounding_box(fig)
-                    curr_x = (current_coords[0][0] + current_coords[1][0])/2
-                    curr_y = (current_coords[0][1] + current_coords[1][1])/2
-                    start_pt = curr_x, curr_y
+                    start_pt = func.get_marker_center(graph, fig)
             else:
                 end_pt = x, y
                 for fig in drag_figures[1:]:
-                    current_coords = graph.get_bounding_box(fig)
-                    curr_x = (current_coords[0][0] + current_coords[1][0])/2
-                    curr_y = (current_coords[0][1] + current_coords[1][1])/2
-                    end_pt = curr_x, curr_y
+                    end_pt = func.get_marker_center(graph, fig)      
                 
-            if None not in (start_pt, end_pt):
-                if values['-MOVE-']:
-                    if len(drag_figures)==1:
-                        pass;
-                    elif len(drag_figures)>1: ## removing the background image from the tuple of objects that can be dragged
-                        for fig in drag_figures[1:]:
-                            current_coords = graph.get_bounding_box(fig)
-                            curr_x = (current_coords[0][0] + current_coords[1][0])/2
-                            curr_y = (current_coords[0][1] + current_coords[1][1])/2
-                            graph.move_figure(fig, x - curr_x, y - curr_y)
-                            graph.update()
-                elif values['-ERASE-']:
-                    for fig in drag_figures:
-                        graph.delete_figure(fig)
-                elif values['-CLEAR-']:
-                    graph.erase()
-                # elif values['-MOVEALL-']:
-                #     graph.move(delta_x, delta_y)
-                elif values['-FRONT-']:
-                    for fig in drag_figures:
-                        graph.bring_figure_to_front(fig)
-                elif values['-BACK-']:
-                    for fig in drag_figures:
-                        graph.send_figure_to_back(fig)
-            window["-INFO-"].update(value=f"Mouse {values['-GRAPH-']}")
-        
-        
-        elif event.endswith('+UP') and values['-MOVE-']:
-            
-            try:
-            
-                window["-INFO-"].update(value=f"Moved point from {start_pt} to {end_pt}")
-                
-                for i in range(len(coord_dict["X"])):
-                    if coord_dict["X"][i] == start_pt[0] and coord_dict["Y"][i] == start_pt[1]:
-                        coord_dict["X"][i] = end_pt[0]
-                        coord_dict["Y"][i] = end_pt[1]
-                        for j, d in func.reverseEnum(coord_dict["ID"]):
-                            if str(d)[:5] == str(coord_dict["ID"][i])[:5] and str(d).endswith('00'):
-                                pmt_x, pmt_y = coord_dict["X"][j], coord_dict["Y"][j]
-                                coord_dict["R"][i] = np.sqrt((coord_dict["X"][i] - pmt_x)**2 + (coord_dict["Y"][i] - pmt_y)**2)
-                                coord_dict["theta"][i] = func.angle_to((pmt_x, pmt_y), (coord_dict["X"][i], coord_dict["Y"][i]))
-                                
-            except Exception as e:
-                print(e)
-                    
-            start_pt, end_pt = None, None  # enable making a new point
-            dragging = False
-            
-        elif event.endswith('+UP') and not values["-MOVE-"]: ## Clicked and made a point
-            
-            try:
-                window["-INFO-"].update(value=f'Made point at ({end_pt[0]}, {end_pt[1]})')
-            except Exception as e:
-                print("Did not make point. Please try again.")
-                print(e)
-            
-            
-            if values["-PMT_POINT-"]:
-                ## drawing PMT point
-                graph.draw_point((x,y), color = 'red', size=8)
-                
-                pmt_id = input("Please enter PMT ID.")
-                coord_dict["ID"].append(pmt_id)
-                coord_dict["X"].append(end_pt[0])
-                coord_dict["Y"].append(end_pt[1])
-                coord_dict["Name"].append(name)
-                
-            
-            if values["-BOLT_POINT-"]:
-                try: ## drawing bolt point
-                    new_bolt = graph.draw_point((x,y), color = 'yellow', size =8)
-                    
-                    ## checks which pmt the bolt belongs to and returns ID of the PMT
-                    ## along with the angle between the dynode and the bolt
-                    
-                    pmt_id, theta, bolt_label = func.bolt_labels(coord_dict, end_pt[0], end_pt[1], name)
-                    print("You just added a bolt ", bolt_label)
-                except Exception as e:
-                    print(e)
-                    print("Your last point could not be added. Please try again.")
-                    graph.delete_figure(new_bolt)
-                    
-            start_pt, end_pt = None, None  # enable making a new point
-            dragging = False
-            
-            
-        elif event == 'Erase item':
-            if values['-GRAPH-'] != (None, None):
+            if values['-MOVE-']:
+                if len(drag_figures)==1:  ## ignoring the background image from the tuple of objects that can be dragged
+                    pass;
+                elif len(drag_figures)>1: 
+                    fig = drag_figures[1]
+                    curr_x, curr_y = func.get_marker_center(graph, fig)
+                    graph.move_figure(fig, x - curr_x, y - curr_y)  ## start with marker centered on cursor
+                    graph.update()
+
+            elif values['-ERASE-']:
                 delete_figure = graph.get_figures_at_location(values['-GRAPH-'])
                 if len(delete_figure) == 1:
                     pass;
                 if len(delete_figure)>1:
                     for figure in delete_figure[1:]:
-                        graph.delete_figure(figure)
+                        graph.delete_figure(figure)                
+            
+            elif (values["-PMT_POINT-"] or values["-BOLT_POINT-"]) and not made_point:
+                
+                ## drawing PMT point
+                if values["-PMT_POINT-"]:
+                    graph.draw_point((x,y), color = 'red', size=8)
+                    
+                    pmt_id = input("Please enter PMT ID.")
+                    coord_dict["ID"].append(pmt_id)
+                    coord_dict["X"].append(x)
+                    coord_dict["Y"].append(y)
+                    coord_dict["Name"].append(name)
+
+                ## drawing bolt point
+                elif values["-BOLT_POINT-"]:
+                    try: 
+                        new_bolt = graph.draw_point((x,y), color = 'yellow', size =8)
+                        
+                        ## checks which pmt the bolt belongs to and returns ID of the PMT
+                        ## along with the angle between the dynode and the bolt
+                        
+                        pmt_id, theta, bolt_label = func.bolt_labels(coord_dict, x, y, name)
+                        print("You just added a bolt ", bolt_label)
+                    except Exception as e:
+                        print(e)
+                        print("Your last point could not be added. Please try again.")
+                        graph.delete_figure(new_bolt)
+
+                window["-INFO-"].update(value=f'Made point at ({x}, {y})')
+                made_point = True
         
+        elif event.endswith('+UP'):
+            
+            made_point = False
+            
+            if values['-MOVE-']:
+                
+                try:               
+                    window["-INFO-"].update(value=f"Moved point from {start_pt} to {end_pt}")
+                    
+                    for i in range(len(coord_dict["X"])):
+                        if coord_dict["X"][i] == start_pt[0] and coord_dict["Y"][i] == start_pt[1]:
+                            coord_dict["X"][i] = end_pt[0]
+                            coord_dict["Y"][i] = end_pt[1]
+                            for j, d in func.reverseEnum(coord_dict["ID"]):
+                                if str(d)[:5] == str(coord_dict["ID"][i])[:5] and str(d).endswith('00'):
+                                    pmt_x, pmt_y = coord_dict["X"][j], coord_dict["Y"][j]
+                                    coord_dict["R"][i] = np.sqrt((coord_dict["X"][i] - pmt_x)**2 + (coord_dict["Y"][i] - pmt_y)**2)
+                                    coord_dict["theta"][i] = func.angle_to((pmt_x, pmt_y), (coord_dict["X"][i], coord_dict["Y"][i]))
+                                    
+                except Exception as e:
+                    print(e)
+                        
+            dragging = False        
+
         elif event.endswith('+MOTION+'):
             window["-INFO-"].update(value=f"Mouse freely moving {values['-GRAPH-']}")
 
@@ -396,45 +354,3 @@ def main():
     window.close() ## For when the user presses the Exit button
     
 main()
-
-
-#%%
-
-
-#%% Trying extra programs
-
-## binding mouse click to window image element
-
-# img = cv.imread(filename)
-# if img is None:
-#     print('Could not read image')
-# window["-IMAGE-"].bind("<Button-1>", draw_feature)
-    
-# base = os.path.basename(filename) ##filename with extension
-# img_name = os.path.splitext(base)[0] ##filename without extension
-    
-# cv.namedWindow(img_name)
-# cv.setMouseCallback(img_name, select_feature)
- 
-
-# directory =  r'C:\Users\gaurr\TB3\BarrelSurveyRings\images2'
-directory = r'C:\Users\gaurr\OneDrive - TRIUMF\Super-K\Feature Detection & Labelling\Sample_Overlay_SK_Images'
-num = 1
-for f in os.listdir(directory):
-    if f.lower().endswith(".png"):
-        f = os.path.join(directory, f)
-        pic_file = f
-        base = os.path.splitext(os.path.basename(f))[0]
-        coords_file =  directory+"/"+base+".txt"
-        func.opencv_overlay(pic_file, coords_file, str(num), base)
-        num+=1
-        if num >= 1:
-            break;
-
-
-
-## Convert all the BarrelSurveyRings images
-
-# jpg_path = os.path.normpath(r'C:\Users\gaurr\TB3\BarrelSurveyRings\images2')
-
-# func.jpg_folder_to_png(jpg_path)

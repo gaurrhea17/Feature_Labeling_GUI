@@ -433,6 +433,12 @@ def erase_labels(graph, pmt_labels, bolt_labels):
             graph.delete_figure(bolt_labels[i])
     except Exception as e:
         print(e)
+        
+def get_marker_center(graph, fig):
+    current_coords = graph.get_bounding_box(fig)
+    curr_x = (current_coords[0][0] + current_coords[1][0])/2
+    curr_y = (current_coords[0][1] + current_coords[1][1])/2
+    return curr_x, curr_y
 #%%  
     # for i in range(len(dict_name["ID"])):
     #     for j in range(len(suffix)):
