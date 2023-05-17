@@ -114,8 +114,7 @@ def main():
     ids = None ## used to specify which figure on sg.Graph to delete
         
     while True:
-        event, values = window.read()
-        print("Events", event, "values", values)
+        event, values = window.read(timeout=100)
         ## 'event' is the key string of whichever element user interacts with
         ## 'values' contains Python dictionary that maps element key to a value
         
@@ -240,24 +239,34 @@ def main():
         
         
         elif event.endswith('+UP') and values['-MOVE-']:
-            window["-INFO-"].update(value=f"Moved point from {start_pt} to {end_pt}")
             
-            for i in range(len(coord_dict["X"])):
-                if coord_dict["X"][i] == start_pt[0] and coord_dict["Y"][i] == start_pt[1]:
-                    coord_dict["X"][i] = end_pt[0]
-                    coord_dict["Y"][i] = end_pt[1]
-                    for j, d in func.reverseEnum(coord_dict["ID"]):
-                        if str(d)[:5] == str(coord_dict["ID"][i])[:5] and str(d).endswith('00'):
-                            pmt_x, pmt_y = coord_dict["X"][j], coord_dict["Y"][j]
-                            coord_dict["R"][i] = np.sqrt((coord_dict["X"][i] - pmt_x)**2 + (coord_dict["Y"][i] - pmt_y)**2)
-                            coord_dict["theta"][i] = func.angle_to((pmt_x, pmt_y), (coord_dict["X"][i], coord_dict["Y"][i]))
+            try:
+            
+                window["-INFO-"].update(value=f"Moved point from {start_pt} to {end_pt}")
+                
+                for i in range(len(coord_dict["X"])):
+                    if coord_dict["X"][i] == start_pt[0] and coord_dict["Y"][i] == start_pt[1]:
+                        coord_dict["X"][i] = end_pt[0]
+                        coord_dict["Y"][i] = end_pt[1]
+                        for j, d in func.reverseEnum(coord_dict["ID"]):
+                            if str(d)[:5] == str(coord_dict["ID"][i])[:5] and str(d).endswith('00'):
+                                pmt_x, pmt_y = coord_dict["X"][j], coord_dict["Y"][j]
+                                coord_dict["R"][i] = np.sqrt((coord_dict["X"][i] - pmt_x)**2 + (coord_dict["Y"][i] - pmt_y)**2)
+                                coord_dict["theta"][i] = func.angle_to((pmt_x, pmt_y), (coord_dict["X"][i], coord_dict["Y"][i]))
+                                
+            except Exception as e:
+                print(e)
                     
             start_pt, end_pt = None, None  # enable making a new point
             dragging = False
             
         elif event.endswith('+UP') and not values["-MOVE-"]: ## Clicked and made a point
             
-            window["-INFO-"].update(value=f'Made point at ({end_pt[0]}, {end_pt[1]})')
+            try:
+                window["-INFO-"].update(value=f'Made point at ({end_pt[0]}, {end_pt[1]})')
+            except Exception as e:
+                print("Did not make point. Please try again.")
+                print(e)
             
             
             if values["-PMT_POINT-"]:
@@ -270,8 +279,6 @@ def main():
                 coord_dict["Y"].append(end_pt[1])
                 coord_dict["Name"].append(name)
                 
-                i+=1
-                j=0
             
             if values["-BOLT_POINT-"]:
                 try: ## drawing bolt point
@@ -384,7 +391,8 @@ def main():
                 
             # except:
             #     sg.popup_ok("Please check your size input format. E.g. ##, ##")
-                
+        
+    window.refresh() ## refreshing the GUI to prevent it from hanging
     window.close() ## For when the user presses the Exit button
     
 main()
