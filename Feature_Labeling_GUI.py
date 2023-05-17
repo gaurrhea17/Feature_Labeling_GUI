@@ -194,6 +194,7 @@ def main():
                 for fig in drag_figures[1:]:
                     end_pt = func.get_marker_center(graph, fig)      
                 
+
             if values['-MOVE-']:
                 if len(drag_figures)==1:  ## ignoring the background image from the tuple of objects that can be dragged
                     pass;
@@ -204,12 +205,19 @@ def main():
                     graph.update()
 
             elif values['-ERASE-']:
-                delete_figure = graph.get_figures_at_location(values['-GRAPH-'])
-                if len(delete_figure) == 1:
-                    pass;
-                if len(delete_figure)>1:
-                    for figure in delete_figure[1:]:
-                        graph.delete_figure(figure)                
+                
+                try:
+                    delete_figure = graph.get_figures_at_location(values['-GRAPH-'])
+                    if len(delete_figure) == 1:
+                        pass;
+                    if len(delete_figure)>1:
+                        for figure in delete_figure[1:]:
+                            graph.delete_figure(figure)
+                            del_x, del_y = func.get_marker_center(graph, figure)
+                            func.del_figs(del_x, del_y, coord_dict)
+                except Exception as e:
+                    print(e)
+
             
             elif (values["-PMT_POINT-"] or values["-BOLT_POINT-"]) and not made_point:
                 
@@ -227,12 +235,18 @@ def main():
                 elif values["-BOLT_POINT-"]:
                     try: 
                         new_bolt = graph.draw_point((x,y), color = 'yellow', size =8)
-                        
+                        print("Drew your new point.")
                         ## checks which pmt the bolt belongs to and returns ID of the PMT
                         ## along with the angle between the dynode and the bolt
                         
-                        pmt_id, theta, bolt_label = func.bolt_labels(coord_dict, x, y, name)
-                        print("You just added a bolt ", bolt_label)
+                    except Exception as e:
+                        print(e)
+                        print("Didn't draw your point.")
+    
+                    try:
+                        pmt_id, bolt_label = func.bolt_labels(coord_dict, x, y, name)
+                        print("Successfully added bolt ", bolt_label)
+                    
                     except Exception as e:
                         print(e)
                         print("Your last point could not be added. Please try again.")
@@ -306,8 +320,10 @@ def main():
             try:
                 func.write_coords_to_csv(coord_dict, filename, values)
                 print("Annotations saved!")
-            except:
+            except Exception as e:
+                print(e)
                 print("Did not save. Check that the file is not open.")
+
             
         # elif event == 'Shift R':
             
