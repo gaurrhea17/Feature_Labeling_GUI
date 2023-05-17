@@ -235,8 +235,9 @@ def main():
                         ## checks which pmt the bolt belongs to and returns ID of the PMT
                         ## along with the angle between the dynode and the bolt
                         
-                        pmt_id, theta, bolt_label = func.bolt_labels(coord_dict, x, y, name)
+                        pmt_id, bolt_label = func.bolt_labels(coord_dict, x, y, name)
                         print("Successfully added bolt ", bolt_label)
+                    
                     except Exception as e:
                         print(e)
                         print("Your last point could not be added. Please try again.")
@@ -310,8 +311,10 @@ def main():
             try:
                 func.write_coords_to_csv(coord_dict, filename, values)
                 print("Annotations saved!")
-            except:
+            except Exception as e:
+                print(e)
                 print("Did not save. Check that the file is not open.")
+
             
         # elif event == 'Shift R':
             

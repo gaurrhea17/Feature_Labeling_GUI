@@ -315,7 +315,7 @@ def autoload_pts(values, graph, filename, name):
                 buffer_x, buffer_y = coord_dict["X"][index], coord_dict["Y"][index]
                 print(buffer_x, buffer_y)
                 coord_dict["R"][i] = np.sqrt((float(x_overlay[i]) - buffer_x)**2 + (y_point - buffer_y)**2)
-                coord_dict["theta"][i] = angle_to((buffer_x, buffer_y), (float(x_overlay[i]), y_point))
+                coord_dict["theta"][i] = angle_to((float(x_overlay[i]), y_point), (buffer_x, buffer_y))
 
             else:
                 continue
@@ -362,14 +362,11 @@ def write_coords_to_csv(dict_name, filename, values):
     df = df.transpose()
     headers=["ID", "X", "Y", "Name"]
     df.to_csv(csv_file, index=None, mode ='w')
+    df[headers].to_csv(path_txt, index=False, sep='\t')
     
     
-    with open(path_csv, 'r') as f_in, open(path_txt, 'w') as f_out:
-        content = f_in.read()
-        f_out.write(content, columns = headers, header = False)
-    
-def angle_to(p1, p2, rotation = 90, clockwise=False):
-    angle = math.degrees(math.atan2(p2[1] - p1[1], p2[0] - p1[0])) + rotation
+def angle_to(p1, p2, rotation = 270, clockwise=False):
+    angle = math.degrees(math.atan2(p2[1] - p1[1], p2[0] - p1[0])) - rotation
     if not clockwise:
         angle = -angle
     return angle % 360
@@ -398,7 +395,7 @@ def bolt_labels(dict_name, bolt_x, bolt_y, name):
     
     ## calculate angle between PMT dynode and bolt
     theta = angle_to((bolt_x, bolt_y), (bolt_x - buffer_x[pmt_id-1], bolt_y - buffer_y[pmt_id-1]))
-    # theta = math.degrees(np.arctan(buffer_x[pmt_id-1]/buffer_y[pmt_id-1])) ## angle between dynode and bolt
+
     print(f"Angle between PMT and bolt {theta}")
     # print("Length of dictionary, ", len(dict_name["ID"]))
     
@@ -417,19 +414,34 @@ def bolt_labels(dict_name, bolt_x, bolt_y, name):
     
     for i in range(len(dict_name["ID"])):
         # if dict_name["ID"][i].startswith("{:05d}".format(pmt_id)) and dict_name["ID"][i].endswith("{:02d}".format(index_theta-1)):
-        if dict_name["ID"][i].startswith("{:05d}".format(pmt_id)) and dict_name["theta"][i] != None and dict_name["theta"][i] > theta:
-            bolt_num = "{:02d}".format(int(str(dict_name["ID"][i])[-2:])+1)
-            bolt_label = pmt_name+"-"+bolt_num
-            print("The bolt after the one you added is ", dict_name["ID"][i], f"at index, {i} with angle ", {dict_name["theta"][i]})
+        if dict_name["ID"][i].startswith("{:05d}".format(pmt_id)):
             
-            dict_name["ID"].insert(i-1, bolt_label)
-            dict_name["X"].insert(i-1, bolt_x)
-            dict_name["Y"].insert(i-1, bolt_y)
-            dict_name["R"].insert(i-1, min(buffer_r))
-            dict_name["theta"].insert(i-1, theta)
-            dict_name["Name"].insert(i-1, name)
-            print("Inserted your new bolt", bolt_label, f"at index, {i-1} with angle ",dict_name["theta"][i-1])
-            break;
+            if dict_name["theta"][i] != None and dict_name["theta"][i] > theta:
+           
+                
+                bolt_num = "{:02d}".format(int(str(dict_name["ID"][i])[-2:])-1)
+                bolt_label = pmt_name+"-"+bolt_num
+                print("The bolt after the one you added is ", dict_name["ID"][i], f"at index, {i} with angle ", {dict_name["theta"][i]})
+                
+                dict_name["ID"].insert(i-1, bolt_label)
+                dict_name["X"].insert(i-1, bolt_x)
+                dict_name["Y"].insert(i-1, bolt_y)
+                dict_name["R"].insert(i-1, min(buffer_r))
+                dict_name["theta"].insert(i-1, theta)
+                dict_name["Name"].insert(i-1, name)
+                print("Inserted your new bolt", bolt_label, f"at index, {i-1} with angle ",dict_name["theta"][i-1])
+        
+            elif str(dict_name["theta"][i]).endswith('01') and dict_name["theta"][i] < theta:
+                bolt_label = pmt_name+"-24"
+                
+                dict_name["ID"].insert(i+23, bolt_label)
+                dict_name["X"].insert(i+23, bolt_x)
+                dict_name["Y"].insert(i+23, bolt_y)
+                dict_name["R"].insert(i+23, min(buffer_r))
+                dict_name["theta"].insert(i+23, theta)
+                dict_name["Name"].insert(i+23, name)
+                print("Inserted your new bolt", bolt_label, f"at index, {i-1} with angle ",dict_name["theta"][i-1])
+        break;
             
     return pmt_name, bolt_label
     
