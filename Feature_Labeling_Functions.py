@@ -327,7 +327,7 @@ def autoload_pts(values, graph, filename, name):
     
 def del_figs(x, y, dict_name):
     for i in range(len(dict_name["ID"])):
-        if x == dict_name["X"][i] and y == dict_name["Y"]:
+        if dict_name["X"][i] == x and dict_name["Y"][i] == y:
             del dict_name["ID"][i]
             del dict_name["X"][i]
             del dict_name["Y"][i]
@@ -413,15 +413,29 @@ def bolt_labels(dict_name, bolt_x, bolt_y, name):
     # print("Bolt number will be ", index_theta)
     
     for i in range(len(dict_name["ID"])):
+        print("Entered loop to find where to add the bolt.")
         # if dict_name["ID"][i].startswith("{:05d}".format(pmt_id)) and dict_name["ID"][i].endswith("{:02d}".format(index_theta-1)):
         if dict_name["ID"][i].startswith("{:05d}".format(pmt_id)):
+            print("Looking at features that start with correct PMT.")
             
-            if dict_name["theta"][i] != None and dict_name["theta"][i] > theta:
-           
+            if str(dict_name["theta"][i]).endswith('23') and dict_name["theta"][i] < theta:
+                bolt_label = pmt_name+"-24"
                 
-                bolt_num = "{:02d}".format(int(str(dict_name["ID"][i])[-2:])-1)
+                dict_name["ID"].insert(i+1, bolt_label)
+                dict_name["X"].insert(i+1, bolt_x)
+                dict_name["Y"].insert(i+1, bolt_y)
+                dict_name["R"].insert(i+1, min(buffer_r))
+                dict_name["theta"].insert(i+1, theta)
+                dict_name["Name"].insert(i+1, name)
+                print("Inserted your new bolt", bolt_label, f"at index, {i+1} with angle ",dict_name["theta"][i+1])
+                break;
+            
+            elif dict_name["theta"][i] != None and dict_name["theta"][i] > theta:
+                print("Looking at where this bolt's theta is smaller than pre-existing points.")
+                
+                bolt_num = "{:02d}".format(int(str(dict_name["ID"][i-1])[-2:])+1)
                 bolt_label = pmt_name+"-"+bolt_num
-                print("The bolt after the one you added is ", dict_name["ID"][i], f"at index, {i} with angle ", {dict_name["theta"][i]})
+                print("The bolt before the one you added is ", dict_name["ID"][i-1], f"at index, {i-1} with angle ", {dict_name["theta"][i-1]})
                 
                 dict_name["ID"].insert(i-1, bolt_label)
                 dict_name["X"].insert(i-1, bolt_x)
@@ -430,18 +444,8 @@ def bolt_labels(dict_name, bolt_x, bolt_y, name):
                 dict_name["theta"].insert(i-1, theta)
                 dict_name["Name"].insert(i-1, name)
                 print("Inserted your new bolt", bolt_label, f"at index, {i-1} with angle ",dict_name["theta"][i-1])
+                break;
         
-            elif str(dict_name["theta"][i]).endswith('01') and dict_name["theta"][i] < theta:
-                bolt_label = pmt_name+"-24"
-                
-                dict_name["ID"].insert(i+23, bolt_label)
-                dict_name["X"].insert(i+23, bolt_x)
-                dict_name["Y"].insert(i+23, bolt_y)
-                dict_name["R"].insert(i+23, min(buffer_r))
-                dict_name["theta"].insert(i+23, theta)
-                dict_name["Name"].insert(i+23, name)
-                print("Inserted your new bolt", bolt_label, f"at index, {i-1} with angle ",dict_name["theta"][i-1])
-        break;
             
     return pmt_name, bolt_label
     

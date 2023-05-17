@@ -205,14 +205,18 @@ def main():
                     graph.update()
 
             elif values['-ERASE-']:
-                delete_figure = graph.get_figures_at_location(values['-GRAPH-'])
-                if len(delete_figure) == 1:
-                    pass;
-                if len(delete_figure)>1:
-                    for figure in delete_figure[1:]:
-                        graph.delete_figure(figure)
-                        del_x, del_y = func.get_marker_center(graph, figure)
-                        func.del_figs(del_x, del_y, coord_dict)
+                
+                try:
+                    delete_figure = graph.get_figures_at_location(values['-GRAPH-'])
+                    if len(delete_figure) == 1:
+                        pass;
+                    if len(delete_figure)>1:
+                        for figure in delete_figure[1:]:
+                            graph.delete_figure(figure)
+                            del_x, del_y = func.get_marker_center(graph, figure)
+                            func.del_figs(del_x, del_y, coord_dict)
+                except Exception as e:
+                    print(e)
 
             
             elif (values["-PMT_POINT-"] or values["-BOLT_POINT-"]) and not made_point:
@@ -231,10 +235,15 @@ def main():
                 elif values["-BOLT_POINT-"]:
                     try: 
                         new_bolt = graph.draw_point((x,y), color = 'yellow', size =8)
-                        
+                        print("Drew your new point.")
                         ## checks which pmt the bolt belongs to and returns ID of the PMT
                         ## along with the angle between the dynode and the bolt
                         
+                    except Exception as e:
+                        print(e)
+                        print("Didn't draw your point.")
+    
+                    try:
                         pmt_id, bolt_label = func.bolt_labels(coord_dict, x, y, name)
                         print("Successfully added bolt ", bolt_label)
                     
