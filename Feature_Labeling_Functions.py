@@ -276,7 +276,7 @@ def autoload_pts(values, graph, filename, name):
     
     try:
     
-        pts_dir = os.path.dirname(values["-FOLDER-"])+r'\points'
+        pts_dir = os.path.join(os.path.dirname(values["-FOLDER-"]), 'points')
         buffer_pmts = []
         pts_file = os.path.basename(filename).split('.')[0]
         pts_fname = os.path.join(pts_dir, pts_file) + ".txt" 

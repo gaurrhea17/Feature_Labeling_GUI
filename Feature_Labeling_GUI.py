@@ -335,7 +335,7 @@ def main():
         elif event == '-SAVE-': ## saves annotated image and objects
             dir_name = os.path.dirname(filename)
             base = os.path.basename(filename)
-            annotate_fname = str(dir_name)+r"/annotated_"+str(base)
+            annotate_fname = os.path.join(str(dir_name), "annotated_"+str(base))
             # func.save_element_as_file(column, annotate_fname)
             
         elif event == '-PLOT_LABEL-':
