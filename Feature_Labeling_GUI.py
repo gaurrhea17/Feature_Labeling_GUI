@@ -223,8 +223,17 @@ def main():
                             graph.move_figure(fig, x - curr_x, y - curr_y)
                             graph.update()
                 elif values['-ERASE-']:
-                    for fig in drag_figures:
-                        graph.delete_figure(fig)
+                    if len(drag_figures) == 1:
+                        pass
+                    elif len(drag_figures) >1:
+                        for fig in drag_figures:
+                            graph.delete_figure(fig)
+                            current_coords = graph.get_bounding_box(fig)
+                            del_x = (current_coords[0][0] + current_coords[1][0])/2
+                            del_y = (current_coords[0][1] + current_coords[1][1])/2
+                            
+                            func.del_figs(del_x, del_y, coord_dict)
+
                 elif values['-CLEAR-']:
                     graph.erase()
                 # elif values['-MOVEALL-']:
@@ -287,8 +296,8 @@ def main():
                     ## checks which pmt the bolt belongs to and returns ID of the PMT
                     ## along with the angle between the dynode and the bolt
                     
-                    pmt_id, theta, bolt_label = func.bolt_labels(coord_dict, end_pt[0], end_pt[1], name)
-                    print("You just added a bolt ", bolt_label)
+                    pmt_id, bolt_label = func.bolt_labels(coord_dict, end_pt[0], end_pt[1], name)
+                    print("Successfully added bolt ", bolt_label)
                 except Exception as e:
                     print(e)
                     print("Your last point could not be added. Please try again.")
