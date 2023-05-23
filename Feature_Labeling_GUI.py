@@ -18,7 +18,7 @@ import PySimpleGUI as sg
 import matplotlib
 import matplotlib.pyplot as plt
 import cv2 as cv
-import ast
+import geopandas as gpd
 
 import Feature_Labeling_Functions as func
 import Feature_Labeling_Variables as var
@@ -30,7 +30,7 @@ sys.path.append(r'C:\Users\gaurr\OneDrive - TRIUMF\Super-K\Reconstruction\Photog
 #%% Defining window objects and layout
 
 # sg.theme_previewer() ## Use to see all the colour themes available
-sg.theme('GreenTan') ## setting window colour scheme
+sg.theme('LightPurple') ## setting window colour scheme
 sg.set_options(dpi_awareness=True)
 
 ## Top menubar options
@@ -42,10 +42,10 @@ menubar = [[sg.Menu(menu_butts)],]
 file_list_col = [
     [
      sg.Text("Image folder"),
-     sg.In(size=(25,1), enable_events =True, key="-FOLDER-"),
+     sg.In(size=(15,1), enable_events =True, key="-FOLDER-"),
      sg.FolderBrowse(),
      ],
-    [sg.Listbox(values=[], enable_events=True, size=(40,20), key="-FILE LIST-")
+    [sg.Listbox(values=[], enable_events=True, size=(25,20), key="-FILE LIST-")
      ], ## displays a list of paths to the images you can choose from to display
     ]
 
@@ -61,7 +61,7 @@ mov_col = [[sg.T('Choose what you want to do:', enable_events=True)],
            [sg.R('Bring to front', 1, key='-FRONT-', enable_events=True)],
            [sg.R('Move Everything', 1, key='-MOVEALL-', enable_events=True)],
            [sg.R('Move Stuff', 1, key='-MOVE-', enable_events=True)],
-           [sg.R('Fill in remaining labels', 1, key='-AUTO_LABEL-', enable_events=True)],
+           [sg.R("Auto-label", 1, key='-LABELING-', enable_events=True)],
            ]
 
 column = [[sg.Graph(canvas_size = (var.width, var.height), graph_bottom_left = (0,0), graph_top_right = (var.width,var.height), 
@@ -78,18 +78,18 @@ image_viewer_col_2 = [
 post_process_col= [
     [sg.Column(mov_col)],
     [sg.Button("Save Annotations", size = (15,1), key="-SAVE-")],
-    [sg.Button("Plot Labels", size = (15,1), key="-PLOT_LABEL-"), sg.Button("Remove Labels", size = (15,1), key="-ERASE_LABEL-")],
+    [sg.Button("Plot Labels", size = (15,1), key="-PLOT_LABEL-"), sg.Button("Remove Labels", size = (18,1), key="-ERASE_LABEL-")],
     [sg.Button("Write CSV", size = (15,1), key="-CSV-")],
     [sg.Button("Reconstruct", size=(15,1), key="-RECON-")],
-    # [sg.Slider(range=(1,10), orientation='h', resolution=.1, default_value=1, key='-ZOOM-', enable_events=True),],
+    [sg.Button('Autolabel', size =(15,1), key='-AUTO_LABEL-')],
     [sg.Button('Zoom In'), sg.Button('Zoom Out')],
     [sg.Button("Shift R"), sg.Button("Shift L")],
     [
-     sg.Text("Choose a file of overlay points: "),
-     sg.In(size=(15,1), enable_events =True, key="-OVERLAY-"),
-     sg.FileBrowse(),
-     ],
-    ]
+     sg.Text("Choose a file of overlay points: ")],
+     [sg.In(size=(18,1), enable_events =True, key="-OVERLAY-")],
+     [sg.FileBrowse()],
+     ]
+    
 
 
 ## Main function
@@ -113,6 +113,7 @@ def main():
     made_point = False
     start_pt = end_pt = None
     ids = None ## used to specify which figure on sg.Graph to delete
+    pmt1 = None
         
     while True:
         event, values = window.read()
@@ -138,6 +139,7 @@ def main():
                     graph.erase()
                     
                 image, pil_image, filename, ids = func.disp_image(window, values, fnames, location=0)
+                pmt1 = None ## to allow autolabeling again
                 window.refresh()
                 window["-COL-"].contents_changed()
                 
@@ -161,6 +163,7 @@ def main():
             if event == "-PREV-":
                 location=-1
             image, pil_image, filename, ids = func.disp_image(window, values, fnames, location=location)
+            pmt1 = None ##to allow autolabeling again
             window.refresh()
             window["-COL-"].contents_changed()
             
@@ -254,6 +257,104 @@ def main():
 
                 window["-INFO-"].update(value=f'Made point at ({x}, {y})')
                 made_point = True
+                
+    ## ================== AUTO LABELING ===============================
+            
+            elif values["-LABELING-"]:
+                
+                if pmt1 == None:
+                    sg.popup_ok("You selected your first PMT.")
+                
+                    try:
+                        first_pmt = graph.get_figures_at_location(values['-GRAPH-'])
+                        for fig in first_pmt[1:]:
+                            pmt1 = func.get_marker_center(graph, fig)
+                            print("Coordinate of identified PMT", pmt1)
+                            break;
+                    
+                        for i in range(len(coord_dict["ID"])):
+                            # print("Looking for PMT coordinates so you can enter an ID.")
+                            if round(coord_dict["X"][i],1) == pmt1[0] and round(coord_dict["Y"][i],1) == pmt1[1]:
+                                    first_label = input("Please enter this PMT's ID.")
+                                    coord_dict["SK"][i] = first_label
+                                    index = i ##index in full dictionary of identified PMT
+                                    print(f"Index of your identified PMT is {index} in the dictionary.")
+                                    break;
+                            else:
+                                continue;
+                    
+                        x, y = [], [] ## making lists of the PMT points
+                        for i in range(len(coord_dict["ID"])):
+                            if coord_dict["ID"][i].endswith('00'):
+                                x.append(coord_dict["X"][i])
+                                y.append(coord_dict["Y"][i])
+                        
+                        # create list of (x,y) coordinates for PMTs in your picture
+                        point_coords = list(zip(x, y))
+                        
+                        # ## trying geopandas for creating a grid
+                        # parse_data = [[item['Img'], item['ID'], item['SK'], item['X'], item['Y'], item['R'], item['theta'], item['Name']] for item in coord_dict]
+                        # df = pd.DataFrame(coord_dict=parse_data, columns=['Img', 'ID', 'SK', 'X', 'Y', 'R', 'theta', 'Name'])
+                        # pmt_plot = gdf.GeoDataFrame(df, geometry=geopandas.points_from_xy(df.X, df.Y))
+                        # pmt_plot.head()
+                        
+                        
+                        ## place points inside a pseudo regular grid
+                        
+                        nodesx = 100
+                        sizex=20
+                        sizey=20
+                        firstx = min(coord_dict["X"])-20
+                        firsty = min(coord_dict["Y"])-20
+                        
+                        new, xt, yt = [], [], []
+                        for i in point_coords:
+                            xo = int((i[0]-firstx)/sizex) ## gives x grid cell size
+                            yo = int((i[1]-firsty)/sizey)
+                            new.append(nodesx*yo + xo)
+                            xt.append(i[0])
+                            yt.append(i[1])
+                        
+                        sort_points = [x for (y,x) in sorted(zip(new, point_coords))]
+                        
+                        ## index for where we have our identified PMT in sorted list
+                        pmt_idx = np.where(np.array(point_coords) == pmt1)[0][0]
+                        print("The coordinates are apparently ", xt[pmt_idx], yt[pmt_idx])
+                        print("Index where we labeled our PMT", pmt_idx)
+                        
+                        # label_list = [0.0]*len(new)
+                        # label_list[pmt_idx] = first_label
+                        
+                        # for i, e in reversed(list(enumerate(label_list[0:pmt_idx]))):
+                        #     if new[i]
+                
+
+                        plt.scatter(xt, yt)
+                        
+                        
+                        
+                        for i in range(len(sort_points)):
+                            plt.text(sort_points[i][0], sort_points[i][1], str(i))
+                        
+                        plt.show()
+
+                        ## meshgrid method
+                        xv, yv = np.meshgrid(x,y,sparse=True)
+                        # pmt_idx = np.argwhere((xv == pmt1[0]) & (yv == pmt1[1]))
+                        # print("Grid index of identified point, ", pmt_idx)
+                        fig = plt.figure()
+                        ax = fig.add_subplot(111)
+                        ax.plot(xv[0,:], yv[:,0], marker='o', color='k', linestyle='none')
+                        for xy in zip(xv[0,:], yv[:,0]):
+                            ax.annotate('(%s, %s)' % xy, xy=xy, textcoords='data')
+                        ax.grid
+                        # plt.plot(np.diag(xv), np.diag(yv), marker='o', color='k', linestyle='none')
+                        plt.show()
+                    
+                    except Exception as e:
+                        print(e)
+                        print("Autolabeling did not work. Please try selecting a PMT again.")
+        
         
         elif event.endswith('+UP'):
             
@@ -299,6 +400,7 @@ def main():
                    coord_dict["X"].append(x_overlay[i])
                    coord_dict["Y"].append(y_overlay[i])
         
+
 ## ======================== Menubar functions =======================================        
         
         elif event == 'Copy':
@@ -312,6 +414,8 @@ def main():
             
         elif event == '-PLOT_LABEL-':
             pmt_labels, bolt_labels = func.plot_labels(coord_dict, graph)
+            
+                
             
         elif event == '-ERASE_LABEL-':
             func.erase_labels(graph, pmt_labels, bolt_labels)
