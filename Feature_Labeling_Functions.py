@@ -284,7 +284,7 @@ def autoload_pts(values, graph, filename, name):
         x_overlay, y_overlay, id_overlay = overlay_pts(pts_fname) ## overlaying coordinates
         
         ## Dictionary with necessary lists of coordinates
-        coord_dict = {"Img": [], "SK":[None]*len(x_overlay), "ID": [], "X":[], "Y":[], "R": [None]*len(x_overlay), "theta": [None]*len(x_overlay), "Name": [name]*len(x_overlay)}
+        coord_dict = {"Img": [], "F":[None]*len(x_overlay), "ID": [], "X":[], "Y":[], "R": [None]*len(x_overlay), "theta": [None]*len(x_overlay), "Name": [name]*len(x_overlay)}
         
         print("Got overlay coords")
         for i in range(len(x_overlay)):
@@ -295,12 +295,12 @@ def autoload_pts(values, graph, filename, name):
             
             
             if str(id_overlay[i]).endswith('00'):
-                graph.draw_point((float(x_overlay[i]), y_point), color = 'red', size=10)
+                coord_dict["F"][i] = graph.draw_point((float(x_overlay[i]), y_point), color = 'red', size=10)
                 buffer_pmts.append(str(id_overlay[i]))
                 print("Drew a PMT and appending a buffer PMT", buffer_pmts)
                 
             else:
-                graph.draw_point((float(x_overlay[i]), y_point), color = 'yellow', size = 8)
+                coord_dict["F"][i] = graph.draw_point((float(x_overlay[i]), y_point), color = 'yellow', size = 8)
                 print("Drew a bolt")
                 
             coord_dict["ID"].append(str(id_overlay[i]))
@@ -335,7 +335,7 @@ def del_figs(x, y, dict_name):
             del dict_name["theta"][i]
             del dict_name["Name"][i]
             del dict_name["Img"][i]
-            del dict_name["SK"][i]
+            del dict_name["F"][i]
 
 def safe_open_w(path):
     ''' Open "path" for writing, creating any parent directories as needed.
@@ -346,16 +346,16 @@ def safe_open_w(path):
 def reverseEnum(data: list):
     for i in range(len(data)-1, -1, -1):
         yield (i, data[i])
-        
     
 def write_coords_to_csv(dict_name, filename, values):
     ## Open .csv file to write feature coordinates to; w+ means open will truncate the file
     
     part1 = os.path.join(os.path.dirname(values["-FOLDER-"]),'Annotation_Coordinates')
-    part2 = os.path.basename(os.path.splitext(filename)[0])
+    part2_csv = os.path.basename(os.path.splitext(filename)[0])+".csv"
+    part2_txt = os.path.basename(os.path.splitext(filename)[0])+".txt"
     
-    path_csv = os.path.join(part1, part2)+".csv"
-    path_txt = os.path.join(part1, part2)+".txt"
+    path_csv = os.path.join(part1, part2_csv)
+    path_txt = os.path.join(part1, part2_txt)
     
     csv_file = safe_open_w(path_csv)
     df=pd.DataFrame.from_dict(dict_name, orient='index')
@@ -408,44 +408,18 @@ def bolt_labels(dict_name, bolt_x, bolt_y, name):
             print("Found a bolt for this PMT", dict_name["ID"][i])
     
     print("The number of bolts for this PMT is ", len(buffer_theta))
-    if len(buffer_theta) > 24:
-        print("Already reached max number of bolts for this PMT! Unphysical.")
-        return
+    # buffer_theta = sorted(buffer_theta, key = lambda x:float(x)) ## organize the bolts for that PMT
+    # index_theta = np.where(np.array(buffer_theta) == theta)[0][0] + 1 ## bolt label '-##'
+    # print("Bolt number will be ", index_theta)
     
     for i in range(len(dict_name["ID"])):
+        print("Entered loop to find where to add the bolt.")
         # if dict_name["ID"][i].startswith("{:05d}".format(pmt_id)) and dict_name["ID"][i].endswith("{:02d}".format(index_theta-1)):
         if dict_name["ID"][i].startswith("{:05d}".format(pmt_id)):
+            print("Looking at features that start with correct PMT.")
             
-            ## this method requires that the user placed the bolt clockwise and subsequent to an already detected bolt 
-            if dict_name["theta"][i] != None and dict_name["theta"][i] > theta and not dict_name["ID"][i].endswith('01'): ## found a bolt at angle larger than your theta
-  
-                print("Looking at where this bolt's theta is smaller than pre-existing points.")
-                
-                bolt_num = "{:02d}".format(int(str(dict_name["ID"][i-1])[-2:])+1) ## number of bolt right before the one you inserted
-                    
-                bolt_label = pmt_name+"-"+bolt_num
-                print("The bolt before the one you added is ", dict_name["ID"][i-1], f"at index, {i-1} with angle ", {dict_name["theta"][i-1]})
-                
-                dict_name["ID"].insert(i, bolt_label)
-                dict_name["X"].insert(i, bolt_x)
-                dict_name["Y"].insert(i, bolt_y)
-                dict_name["R"].insert(i, min(buffer_r))
-                dict_name["theta"].insert(i, theta)
-                dict_name["Name"].insert(i, name)
-                print("Inserted your new bolt", bolt_label, f"at index, {i} with angle ",dict_name["theta"][i])
-                
-                print("Printing sorted buffer theta list", sorted(buffer_theta))
-                
-                return pmt_name, bolt_label
-            
-            elif max(buffer_theta) == theta and dict_name["theta"][i] != None and dict_name["theta"][i] == sorted(buffer_theta)[-2]:
-                print("Your bolt is at the greatest angle for all bolts around this PMT.")
-                bolt_num = "{:02d}".format(int(str(dict_name["ID"][i])[-2:])+1) ## name bolt so it comes last in series of bolts
-                if bolt_num == '25':
-                    bolt_num = '01'
-                bolt_label = pmt_name+"-"+bolt_num
-                
-                print("The bolt before the one you added is ", dict_name["ID"][i], f"at index, {i} with angle ", {dict_name["theta"][i]})
+            if str(dict_name["theta"][i]).endswith('23') and dict_name["theta"][i] < theta:
+                bolt_label = pmt_name+"-24"
                 
                 dict_name["ID"].insert(i+1, bolt_label)
                 dict_name["X"].insert(i+1, bolt_x)
@@ -454,31 +428,26 @@ def bolt_labels(dict_name, bolt_x, bolt_y, name):
                 dict_name["theta"].insert(i+1, theta)
                 dict_name["Name"].insert(i+1, name)
                 print("Inserted your new bolt", bolt_label, f"at index, {i+1} with angle ",dict_name["theta"][i+1])
-                
-                print("Printing sorted buffer theta list", buffer_theta)
-                
-                return pmt_name, bolt_label
-             
-            elif dict_name["ID"][i].endswith('01') and theta == sorted(buffer_theta)[-2] and dict_name["theta"][i] == max(buffer_theta):
-            # elif len(buffer_theta) == 24 and theta == sorted(buffer_theta)[-2]:
-                print("Inserting the final bolt for this PMT.")
-                
-                bolt_num = '24' ## name bolt so it comes last in series of bolts
-                
-                bolt_label = pmt_name+"-"+bolt_num
-                
-                dict_name["ID"].insert(i, bolt_label)
-                dict_name["X"].insert(i, bolt_x)
-                dict_name["Y"].insert(i, bolt_y)
-                dict_name["R"].insert(i, min(buffer_r))
-                dict_name["theta"].insert(i, theta)
-                dict_name["Name"].insert(i, name)
-                print("Inserted your new bolt", bolt_label, f"at index, {i} with angle ",dict_name["theta"][i])
-                
-                print("Printing sorted buffer theta list", sorted(buffer_theta)[-2])
-                
-                return pmt_name, bolt_label
+                break;
             
+            elif dict_name["theta"][i] != None and dict_name["theta"][i] > theta:
+                print("Looking at where this bolt's theta is smaller than pre-existing points.")
+                
+                bolt_num = "{:02d}".format(int(str(dict_name["ID"][i-1])[-2:])+1)
+                bolt_label = pmt_name+"-"+bolt_num
+                print("The bolt before the one you added is ", dict_name["ID"][i-1], f"at index, {i-1} with angle ", {dict_name["theta"][i-1]})
+                
+                dict_name["ID"].insert(i-1, bolt_label)
+                dict_name["X"].insert(i-1, bolt_x)
+                dict_name["Y"].insert(i-1, bolt_y)
+                dict_name["R"].insert(i-1, min(buffer_r))
+                dict_name["theta"].insert(i-1, theta)
+                dict_name["Name"].insert(i-1, name)
+                print("Inserted your new bolt", bolt_label, f"at index, {i-1} with angle ",dict_name["theta"][i-1])
+                break;
+        
+            
+    return pmt_name, bolt_label
     
 def plot_labels(dict_name, graph):
     try: 
@@ -504,10 +473,6 @@ def erase_labels(graph, pmt_labels, bolt_labels):
             graph.delete_figure(bolt_labels[i])
     except Exception as e:
         print(e)
-        
-        
-# def autolabel_SK_pts(pmt_loc, dict_name, i):
-#     if dict_name["X"][i] = 
         
 def get_marker_center(graph, fig):
     current_coords = graph.get_bounding_box(fig)
