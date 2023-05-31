@@ -106,8 +106,11 @@ def main():
     location = 0
     
     graph = window["-GRAPH-"] 
-    
-    name = sg.popup_get_text('Please enter your initials', title="Name initials") 
+
+    name = None
+    while name is None:    
+        name = sg.popup_get_text('Please enter your initials', title="Name initials")
+        
     Img_ID = None
     
     dragging = False
@@ -218,8 +221,9 @@ def main():
                 ## drawing PMT point
                 if values["-PMT_POINT-"]:                    
                     pmt_id = sg.popup_get_text('Please enter PMT ID', title="Adding PMT")
-                    df = func.make_pmt(df, pmt_id, x, y, name)
-                    graph.draw_point((x,y), color = 'red', size=8)
+                    if pmt_id:
+                        df = func.make_pmt(df, pmt_id, x, y, name)
+                        graph.draw_point((x,y), color = 'red', size=8)
 
                 ## drawing bolt point
                 elif values["-BOLT_POINT-"]:
