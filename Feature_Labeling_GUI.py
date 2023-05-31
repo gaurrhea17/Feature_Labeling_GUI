@@ -107,7 +107,7 @@ def main():
     
     graph = window["-GRAPH-"] 
     
-    name = input("Please enter your initials.")
+    name = sg.popup_get_text('Please enter your initials', title="Name initials") 
     Img_ID = None
     
     dragging = False
