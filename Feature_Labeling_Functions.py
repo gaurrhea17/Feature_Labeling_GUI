@@ -243,15 +243,14 @@ def draw_pts(graph, df, scale=1):
 
     for index, row in df.iterrows(): 
 
-        ## PMT (dynode) centers
-        if str(row[1]).endswith('00'):
-            graph.draw_point((row[2]*scale, row[3]*scale), color = 'red', size=10)
-            #print("Drew a PMT", row[1], row[2], row[3])
+        draw_coords = (row[2]*scale, row[3]*scale)
+        color = 'yellow'
+        size = 6
+        if str(row[1]).endswith('00'): # PMT
+            color = 'red'
+            size = 8
 
-        ## Bolts
-        else:
-            graph.draw_point((row[2]*scale, row[3]*scale), color = 'yellow', size=8)
-            #print("Drew a bolt", row[1], row[2], row[3])
+        graph.draw_point(draw_coords, color = color, size=size)
 
 def autoload_pts(filename):
     
