@@ -319,6 +319,19 @@ def reverseEnum(data: list):
     
 def write_coords_to_csv(df, filename):
 
+    # Check for duplicate IDs
+    if len(df['ID'].unique()) != len(df.index):
+    
+        # List duplicate IDs
+        for i, id in reverseEnum(df['ID'].unique()):
+            df_unique = df[df['ID'] == id]
+            if len(df_unique.index) > 1:
+                x = df_unique['X'].iloc[0]
+                y = df_unique['Y'].iloc[0]
+                
+                err = "Duplicate ID: " + id + " at (" + str(x) + ", " + str(y) + ")"
+                raise Exception(err)
+    
     df = df.sort_values(by=['ID'])
     
     headers=["Img", "ID", "X", "Y", "Name"]

@@ -62,6 +62,7 @@ mov_col = [[sg.T('Choose what you want to do:', enable_events=True)],
            [sg.R('Move Everything', 1, key='-MOVEALL-', enable_events=True)],
            [sg.R('Move Stuff', 1, key='-MOVE-', enable_events=True)],
            [sg.R("Auto-label", 1, key='-LABELING-', enable_events=True)],
+           [sg.R('Cursor Position (Click & Hold)', 1,  key='-SCAN_POSITION-', enable_events=True)],
            ]
 
 column = [[sg.Graph(canvas_size = (var.width, var.height), graph_bottom_left = (0,0), graph_top_right = (var.width,var.height), 
@@ -193,7 +194,8 @@ def main():
         if event == "-GRAPH-":
 
             x, y = values["-GRAPH-"]
-            
+            window["-INFO-"].update(value=f'({x}, {y})')
+
             if not dragging:
                 dragging = True
                 figures = graph.get_figures_at_location((x,y))
@@ -404,8 +406,7 @@ def main():
                 
             except Exception as e:
                 print(e)
-                print("Did not save. Check that the file is not open.")
-
+                sg.popup_ok("Could not save. Check terminal messages.")
             
         # elif event == 'Shift R':
             
@@ -447,3 +448,5 @@ def main():
     window.close() ## For when the user presses the Exit button
     
 main()
+
+# %%
