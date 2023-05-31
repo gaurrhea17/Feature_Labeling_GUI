@@ -55,7 +55,7 @@ def jpg_to_png(jpg_path):
     img_rgba = img.convert("RGBA")
     
     # Get the file name and extension of the .jpg file
-    file_name = os.path.splitext(os.path.basename(jpg_path))[0]
+    filename = os.path.splitext(os.path.basename(jpg_path))[0]
     
     # Save the converted image as .png format to the specified directory
     png_dir = os.path.dirname(jpg_path)
@@ -353,8 +353,7 @@ def make_bolt(df, bolt_x, bolt_y, name):
 
     ## Don't add more than 24 bolts
     if len(df_bolts.index) >= var.NBOLTS:
-        print("Already reached max number of bolts for this PMT! Delete a bolt first.")
-        raise
+        raise Exception("Already reached max number of bolts for this PMT! Erase a bolt first.")
     
     ## calculate angle between PMT center and bolt
     bolt_to_pmt = (bolt_x - pmt_x, bolt_y - pmt_y)

@@ -218,28 +218,28 @@ def main():
             
             elif (values["-PMT_POINT-"] or values["-BOLT_POINT-"]) and not made_point:
                 
-                ## drawing PMT point
-                if values["-PMT_POINT-"]:                    
-                    pmt_id = sg.popup_get_text('Please enter PMT ID', title="Adding PMT")
-                    if pmt_id:
-                        df = func.make_pmt(df, pmt_id, x, y, name)
-                        graph.draw_point((x,y), color = 'red', size=8)
+                try:
+                    ## drawing PMT point
+                    if values["-PMT_POINT-"]:                    
+                        pmt_id = sg.popup_get_text('Please enter PMT ID', title="Adding PMT")
+                        if pmt_id:
+                            df = func.make_pmt(df, pmt_id, x, y, name)
+                            graph.draw_point((x,y), color = 'red', size=8)
 
-                ## drawing bolt point
-                elif values["-BOLT_POINT-"]:
+                    ## drawing bolt point
+                    elif values["-BOLT_POINT-"]:
 
-                    ## checks which pmt the bolt belongs to and returns ID of the PMT
-                    ## along with the angle between the dynode and the bolt    
-                    try:
-                        df = func.make_bolt(df, x, y, name)
-                        graph.draw_point((x,y), color = 'yellow', size=8)
+                        ## checks which pmt the bolt belongs to and returns ID of the PMT
+                        ## along with the angle between the dynode and the bolt    
+                            df = func.make_bolt(df, x, y, name)
+                            graph.draw_point((x,y), color = 'yellow', size=8)
                     
-                    except Exception as e:
-                        print(e)
-                        print("Your last point could not be added. Please try again.")
+                    window["-INFO-"].update(value=f'Made point {df["ID"].iloc[-1]} at ({x}, {y})')
+                    made_point = True
 
-                window["-INFO-"].update(value=f'Made point at ({x}, {y})')
-                made_point = True
+                except Exception as e:
+                    print(e)
+                    window["-INFO-"].update(value=f'Failed point at ({x}, {y})')
                 
     ## ================== AUTO LABELING ===============================
             
@@ -346,17 +346,18 @@ def main():
             if values['-MOVE-']:
                 
                 try:
-                    print(start_pt, end_pt)
                     df = func.move_feature(df, start_pt, end_pt, name)
-                    window["-INFO-"].update(value=f"Moved point from {start_pt} to {end_pt}")
+                    window["-INFO-"].update(value=f"Moved point {df['ID'].iloc[-1]} from {start_pt} to {end_pt}")
 
                 except Exception as e:
                     print(e)
                     
             elif values['-ERASE-']:
                 try:
-                    func.del_point(df, start_pt[0], start_pt[1])
-                    graph.delete_figure(fig)
+                    if len(figures)>1:
+                        graph.delete_figure(fig)
+                        df_erased_feature = func.del_point(df, start_pt[0], start_pt[1])
+                        window["-INFO-"].update(value=f"Erased point {df_erased_feature['ID'].iloc[0]}")
 
                 except Exception as e:
                     print(e)
