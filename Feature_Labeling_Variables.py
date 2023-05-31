@@ -12,5 +12,6 @@ width, height = 4000, 2750 ## sizes of images
 column_width = 1000
 column_height = 750
 invert_y = True
+NBOLTS = 24
 
 global value_file, graph

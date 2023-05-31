@@ -9,7 +9,7 @@ This file hosts all of the user-defined functions referenced in the
 """
 
 ## Importing necessary packages
-
+import sys
 import json
 import math
 import numpy as np
@@ -132,15 +132,6 @@ def array_to_data(im, filename):
             png_img.save(output, format="PNG")
         data = output.getvalue()
     return data
-
-def redraw_pts(dict_name, graph, scale):
-    scale = int(scale)
-    for i in range(len(dict_name["X"])):
-        if str(dict_name["ID"]).endswith('00'):
-            graph.draw_point((float(dict_name["X"][i])*scale, float(dict_name["Y"][i])*scale), color = 'red', size=10)
-        else:
-           graph.draw_point((float(dict_name["X"][i])*scale, float(dict_name["Y"][i])*scale), color = 'yellow', size = 8)
-    graph.update()
     
 def get_curr_coords(graph, drag_figures):
     for fig in drag_figures[1:]:
@@ -231,29 +222,6 @@ def copy(window):
         window.TKroot.clipboard_clear()
         window.TKroot.clipboard_append(text)
 
-
-def overlay_pts(filename):
-    data = np.loadtxt(filename, dtype = str)
-
-    x_coords = data[:,2]
-    y_coords = data[:,3]
-    pmt_ids = data[:,1]
-    # print("The length is",len(x_coords)) ## checking how many points with labels there are
-    suffix = ['00', '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', 
-              '20', '21', '22', '23', '24'] ## want to remove all non-dynode and non-bolt points
-    index = []
-    for i in range(len(x_coords)):
-        if not str(pmt_ids[i]).endswith(tuple(suffix)):
-            index.append(i)
-        
-    x_coords = np.delete(x_coords, index)
-    y_coords = np.delete(y_coords, index)
-    pmt_ids = np.delete(pmt_ids, index)
-    # print("The length is now ", len(x_coords)) ## checking that the extra points are removed
-   
-    return x_coords, y_coords, pmt_ids
-
-
 def save_element_as_file(element, filename):
     """
     Saves any element as an image file.  Element needs to have an underlying Widget available (almost if not all of them do)
@@ -271,71 +239,73 @@ def save_element_as_file(element, filename):
         sg.popup_ok("The file could not be saved.")
         print(e)
 
+def draw_pts(graph, df, scale=1):
 
-def autoload_pts(values, graph, filename, name):
-    
-    try:
-    
-        pts_dir = os.path.join(os.path.dirname(values["-FOLDER-"]), 'points')
-        buffer_pmts = []
-        pts_file = os.path.basename(filename).split('.')[0]
-        pts_fname = os.path.join(pts_dir, pts_file) + ".txt" 
-        print(pts_fname)
-        x_overlay, y_overlay, id_overlay = overlay_pts(pts_fname) ## overlaying coordinates
-        
-        ## Dictionary with necessary lists of coordinates
-        coord_dict = {"Img": [], "SK":[None]*len(x_overlay), "ID": [], "X":[], "Y":[], "R": [None]*len(x_overlay), "theta": [None]*len(x_overlay), "Name": [name]*len(x_overlay)}
-        
-        print("Got overlay coords")
-        for i in range(len(x_overlay)):
-            
-            y_point = float(y_overlay[i])
-            if var.invert_y:
-                y_point = var.height - y_point
-            
-            
-            if str(id_overlay[i]).endswith('00'):
-                graph.draw_point((float(x_overlay[i]), y_point), color = 'red', size=10)
-                buffer_pmts.append(str(id_overlay[i]))
-                print("Drew a PMT and appending a buffer PMT", buffer_pmts)
-                
-            else:
-                graph.draw_point((float(x_overlay[i]), y_point), color = 'yellow', size = 8)
-                print("Drew a bolt")
-                
-            coord_dict["ID"].append(str(id_overlay[i]))
-            coord_dict["X"].append(float(x_overlay[i]))
-            coord_dict["Y"].append(y_point)
-            
-            if not str(id_overlay[i]).endswith('00'):
-                index = [j for j, s in enumerate(coord_dict["ID"]) if str(id_overlay[i])[:5] in s][0]
-                print("Index for matching PMT", index)
-                print("Matching bolt ", str(id_overlay[i]))
-                
-                buffer_x, buffer_y = coord_dict["X"][index], coord_dict["Y"][index]
-                print(buffer_x, buffer_y)
-                coord_dict["R"][i] = np.sqrt((float(x_overlay[i]) - buffer_x)**2 + (y_point - buffer_y)**2)
-                coord_dict["theta"][i] = angle_to((float(x_overlay[i]), y_point), (buffer_x, buffer_y))
+    for index, row in df.iterrows(): 
 
-            else:
-                continue
-            
-        return x_overlay, y_overlay, id_overlay, pts_fname, coord_dict
-        
-    except Exception as e:
-        print(e)
+        ## PMT (dynode) centers
+        if str(row[1]).endswith('00'):
+            graph.draw_point((row[2]*scale, row[3]*scale), color = 'red', size=10)
+            #print("Drew a PMT", row[1], row[2], row[3])
+
+        ## Bolts
+        else:
+            graph.draw_point((row[2]*scale, row[3]*scale), color = 'yellow', size=8)
+            #print("Drew a bolt", row[1], row[2], row[3])
+
+def autoload_pts(filename):
     
-def del_figs(x, y, dict_name):
-    for i in range(len(dict_name["ID"])):
-        if dict_name["X"][i] == x and dict_name["Y"][i] == y:
-            del dict_name["ID"][i]
-            del dict_name["X"][i]
-            del dict_name["Y"][i]
-            del dict_name["R"][i]
-            del dict_name["theta"][i]
-            del dict_name["Name"][i]
-            del dict_name["Img"][i]
-            del dict_name["SK"][i]
+    print("Loading existing points file:", filename)
+    
+    ## Read space delimited point file into dataframe
+    df = pd.read_csv(filename, delim_whitespace=True, names=["Img", "ID", "X", "Y", "Name"])
+    
+    ## Remove points not corresponding to PMT/dynode center nor bolts
+    df = df[df['ID'].apply(lambda id: float(id[-2:])<=var.NBOLTS)]    
+    
+    ## Add columns for automatic bolt labeling variables
+    df['R'] = np.nan
+    df['theta'] = np.nan
+            
+    ## Invert Y coordinate from the FeatureReco convention
+    if var.invert_y:
+        df['Y'] = df['Y'].map(lambda Y: var.height-Y)    
+    
+    ## Process all the points
+    for index, row in df.iterrows(): 
+
+        ## PMT (dynode) centers
+        if str(row[1]).endswith('00'):
+            pass
+        
+        ## Bolts
+        else:
+            ## Get PMT ID associated to this bolt                
+            PMT_ID = row[1][:-2] + '00'
+            df_pmt = df.loc[df['ID'] == PMT_ID]
+
+            if len(df_pmt.index)>1:
+                sys.exit("Unexpected duplicate PMT_ID " + PMT_ID)
+            
+            ## Calculate parameters needed for automatic bolt labeling
+            pmt_x = float(df_pmt['X'].iloc[0])
+            pmt_y = float(df_pmt['Y'].iloc[0])
+            df.at[index, 'R'] = np.sqrt( (float(row[2])-pmt_x)**2 + (float(row[3])-pmt_y)**2 )
+            df.at[index, 'theta'] = angle_to( (float(row[2]), float(row[3])), (pmt_x, pmt_y) )
+
+    return df
+
+def del_point(df, x, y):
+
+    df_feature = df[ (df['X'] == x) & (df['Y'] == y) ]
+    
+    if len(df_feature.index) == 0:
+        print("No feature found at this location!")
+        raise
+
+    df.drop(df_feature.index, inplace=True)
+
+    return df_feature
 
 def safe_open_w(path):
     ''' Open "path" for writing, creating any parent directories as needed.
@@ -346,174 +316,157 @@ def safe_open_w(path):
 def reverseEnum(data: list):
     for i in range(len(data)-1, -1, -1):
         yield (i, data[i])
-        
     
-def write_coords_to_csv(dict_name, filename, values):
-    ## Open .csv file to write feature coordinates to; w+ means open will truncate the file
+def write_coords_to_csv(df, filename):
+
+    df = df.sort_values(by=['ID'])
     
-    part1 = os.path.join(os.path.dirname(values["-FOLDER-"]),'Annotation_Coordinates')
-    part2 = os.path.basename(os.path.splitext(filename)[0])
-    
-    path_csv = os.path.join(part1, part2)+".csv"
-    path_txt = os.path.join(part1, part2)+".txt"
-    
-    csv_file = safe_open_w(path_csv)
-    df=pd.DataFrame.from_dict(dict_name, orient='index')
-    df = df.transpose()
-    headers=["ID", "X", "Y", "Name"]
-    df.to_csv(csv_file, index=None, mode ='w')
-    df[headers].to_csv(path_txt, index=False, sep='\t')
-    
-    
+    headers=["Img", "ID", "X", "Y", "Name"]
+    df[headers].to_csv(filename, index=False, header=False, sep='\t')
+
+    print("Saved Annotations:", filename)
+
 def angle_to(p1, p2, rotation = 270, clockwise=False):
     angle = math.degrees(math.atan2(p2[1] - p1[1], p2[0] - p1[0])) - rotation
     if not clockwise:
         angle = -angle
     return angle % 360
+
+def get_closest_pmt(df, x, y):
+    df_pmts = df[df['ID'].apply(lambda id: float(id[-2:]) == 0)]
+    df_closest = df_pmts.iloc[ ((df_pmts['X'] - x)**2 + (df_pmts['Y'] - y)**2).argsort()[:1] ]
+    pmt_id = df_closest['ID'].iloc[0][:5]
+    pmt_x = df_closest['X'].iloc[0]
+    pmt_y = df_closest['Y'].iloc[0]
+    return pmt_id, pmt_x, pmt_y
     
-def bolt_labels(dict_name, bolt_x, bolt_y, name):
-    buffer_x = []
-    buffer_y = []
-    buffer_r = []
-    suffix = []
-    for i in range(1, 24): # Bolt labels
-        suffix.append('%02d' % i)
-    
-    ## calculate the distance from bolt in question to each PMT
-    for i in range(len(dict_name["ID"])):
-        if str(dict_name["ID"][i]).endswith('00'):
-            x = bolt_x - float(dict_name["X"][i])
-            y = bolt_y - float(dict_name["Y"][i])
-            buffer_r.append(np.sqrt(x**2 + y**2))
-            buffer_x.append(x)
-            buffer_y.append(y)
+def make_bolt(df, bolt_x, bolt_y, name):
     
     ## Find which PMT the bolt is closest to
-    pmt_id = np.where(np.array(buffer_r) == min(buffer_r))[0][0] +1 ## PMT number where distance between bolt and PMT is minimum
-    # print(f"Calculated distance to {len(buffer_r)} PMTs")
-    print("PMT number where min. distance between bolt and dynode :", pmt_id)
-    
-    ## calculate angle between PMT dynode and bolt
-    theta = angle_to((bolt_x, bolt_y), (bolt_x - buffer_x[pmt_id-1], bolt_y - buffer_y[pmt_id-1]))
+    ### (WARNING: this will not work if the bolt is closer to a different PMT center))
+    pmt_id, pmt_x, pmt_y = get_closest_pmt(df, bolt_x, bolt_y)
+    #print("PMT number where min. distance between bolt and dynode :", pmt_id)
 
-    print(f"Angle between PMT and bolt {theta}")
-    # print("Length of dictionary, ", len(dict_name["ID"]))
+    ## Get list of existing bolts for this PMT
+    df_bolts = df[df['ID'].apply(lambda id: (id[:5] == pmt_id) & (float(id[-2:]) > 0))]
+    #print("The number of bolts for this PMT is ", len(df_bolts.index))
+
+    ## Don't add more than 24 bolts
+    if len(df_bolts.index) >= var.NBOLTS:
+        print("Already reached max number of bolts for this PMT! Delete a bolt first.")
+        raise
     
-    buffer_theta = []
-    buffer_theta.append(theta)
-    for i in range(len(dict_name["ID"])): ## tracking the remaining bolts associated with this PMT
-        if dict_name["ID"][i].startswith("{:05d}".format(pmt_id)) and not dict_name["ID"][i].endswith("00"):
-            pmt_name = str(dict_name["ID"][i])[:5]
-            buffer_theta.append(dict_name["theta"][i])
-            print("Found a bolt for this PMT", dict_name["ID"][i])
+    ## calculate angle between PMT center and bolt
+    bolt_to_pmt = (bolt_x - pmt_x, bolt_y - pmt_y)
+    bolt_r = np.sqrt(bolt_to_pmt[0]**2 + bolt_to_pmt[1]**2)
+    theta = angle_to((bolt_x, bolt_y), (pmt_x, pmt_y))
+    #print(f"Angle between PMT and bolt {theta}")
     
-    print("The number of bolts for this PMT is ", len(buffer_theta))
-    if len(buffer_theta) > 24:
-        print("Already reached max number of bolts for this PMT! Unphysical.")
-        return
-    
-    for i in range(len(dict_name["ID"])):
-        # if dict_name["ID"][i].startswith("{:05d}".format(pmt_id)) and dict_name["ID"][i].endswith("{:02d}".format(index_theta-1)):
-        if dict_name["ID"][i].startswith("{:05d}".format(pmt_id)):
+    # Get entry in df_bolts with value closest to 'theta'
+    df_closest_theta = df_bolts.iloc[ (abs((theta - df_bolts['theta'] + 180)%360-180)).argsort()[:1] ]            
+    #print("Closest theta is ", df_closest_theta)
+
+    # Assign 'ID' +1 if theta is greater than the closest theta or 'ID' -1 if theta is less than the closest theta
+    if len(df_closest_theta.index) == 0:
+        #print("No bolts for this PMT yet!")
+        bolt_label = '-01'
+
+    else:
+        closest_bolt_id = int(df_closest_theta['ID'].iloc[0][-2:])        
+        closest_theta = df_closest_theta['theta'].iloc[0]        
+
+        # Determine if theta is clockwise to closest_theta
+        if (theta - closest_theta - 180)%360 - 180 > 0: # clockwise
             
-            ## this method requires that the user placed the bolt clockwise and subsequent to an already detected bolt 
-            if dict_name["theta"][i] != None and dict_name["theta"][i] > theta and not dict_name["ID"][i].endswith('01'): ## found a bolt at angle larger than your theta
-  
-                print("Looking at where this bolt's theta is smaller than pre-existing points.")
-                
-                bolt_num = "{:02d}".format(int(str(dict_name["ID"][i-1])[-2:])+1) ## number of bolt right before the one you inserted
-                    
-                bolt_label = pmt_name+"-"+bolt_num
-                print("The bolt before the one you added is ", dict_name["ID"][i-1], f"at index, {i-1} with angle ", {dict_name["theta"][i-1]})
-                
-                dict_name["ID"].insert(i, bolt_label)
-                dict_name["X"].insert(i, bolt_x)
-                dict_name["Y"].insert(i, bolt_y)
-                dict_name["R"].insert(i, min(buffer_r))
-                dict_name["theta"].insert(i, theta)
-                dict_name["Name"].insert(i, name)
-                print("Inserted your new bolt", bolt_label, f"at index, {i} with angle ",dict_name["theta"][i])
-                
-                print("Printing sorted buffer theta list", sorted(buffer_theta))
-                
-                return pmt_name, bolt_label
+            if closest_bolt_id == var.NBOLTS:
+                bolt_label = '-01'
             
-            elif max(buffer_theta) == theta and dict_name["theta"][i] != None and dict_name["theta"][i] == sorted(buffer_theta)[-2]:
-                print("Your bolt is at the greatest angle for all bolts around this PMT.")
-                bolt_num = "{:02d}".format(int(str(dict_name["ID"][i])[-2:])+1) ## name bolt so it comes last in series of bolts
-                if bolt_num == '25':
-                    bolt_num = '01'
-                bolt_label = pmt_name+"-"+bolt_num
-                
-                print("The bolt before the one you added is ", dict_name["ID"][i], f"at index, {i} with angle ", {dict_name["theta"][i]})
-                
-                dict_name["ID"].insert(i+1, bolt_label)
-                dict_name["X"].insert(i+1, bolt_x)
-                dict_name["Y"].insert(i+1, bolt_y)
-                dict_name["R"].insert(i+1, min(buffer_r))
-                dict_name["theta"].insert(i+1, theta)
-                dict_name["Name"].insert(i+1, name)
-                print("Inserted your new bolt", bolt_label, f"at index, {i+1} with angle ",dict_name["theta"][i+1])
-                
-                print("Printing sorted buffer theta list", buffer_theta)
-                
-                return pmt_name, bolt_label
-             
-            elif dict_name["ID"][i].endswith('01') and theta == sorted(buffer_theta)[-2] and dict_name["theta"][i] == max(buffer_theta):
-            # elif len(buffer_theta) == 24 and theta == sorted(buffer_theta)[-2]:
-                print("Inserting the final bolt for this PMT.")
-                
-                bolt_num = '24' ## name bolt so it comes last in series of bolts
-                
-                bolt_label = pmt_name+"-"+bolt_num
-                
-                dict_name["ID"].insert(i, bolt_label)
-                dict_name["X"].insert(i, bolt_x)
-                dict_name["Y"].insert(i, bolt_y)
-                dict_name["R"].insert(i, min(buffer_r))
-                dict_name["theta"].insert(i, theta)
-                dict_name["Name"].insert(i, name)
-                print("Inserted your new bolt", bolt_label, f"at index, {i} with angle ",dict_name["theta"][i])
-                
-                print("Printing sorted buffer theta list", sorted(buffer_theta)[-2])
-                
-                return pmt_name, bolt_label
-            
-    
-def plot_labels(dict_name, graph):
-    try: 
-        pmt_labels = [None]*len(dict_name["X"])
-        bolt_labels = [None]*len(dict_name["X"])
-        for i in range(len(dict_name["ID"])):
-            if dict_name["ID"][i].endswith("00"):
-                pmt_labels[i] = graph.DrawText(text=str(dict_name["ID"][i])[2:5], location=(dict_name["X"][i]-10, dict_name["Y"][i]-10), color='red')
-                # graph.DrawText(text=str(dict_name["ID"][i])[2:5], location=(dict_name["X"][i]-10, dict_name["Y"][i])-10, color='red')
             else:
-                bolt_labels[i] = graph.DrawText(text=str(dict_name["ID"][i])[6:], location=(dict_name["X"][i]-10, dict_name["Y"][i]-10), color = 'yellow')
-                # graph.DrawText(text=str(dict_name["ID"][i])[6:], location=(dict_name["X"][i]-10, dict_name["Y"][i])-10, color = 'yellow')
-        return pmt_labels, bolt_labels
+                bolt_label = '-{:02d}'.format(closest_bolt_id+1)
+
+        # Counter-clockwise
+        else:
+            
+            if closest_bolt_id == 1:
+                bolt_label = '-{:02d}'.format(var.NBOLTS)
+            
+            else:   
+                bolt_label = '-{:02d}'.format(closest_bolt_id-1)
+
+    New_ID = pmt_id.zfill(5) + bolt_label
+
+    # append new row to dataframe
+    df_new_bolt = pd.DataFrame({'Img': df['Img'].iloc[0], 'ID': New_ID, 'X': bolt_x, 'Y': bolt_y, 'Name': name, 'R': bolt_r, 'theta': theta}, index=[0])
+    df = pd.concat([df, df_new_bolt], ignore_index=True)
+    #df.loc[len(df.index)] = [df['Img'].iloc[0], New_ID, bolt_x, bolt_y, name, bolt_r, theta]
+
+    print("Inserted your new bolt", df.tail(1))
+
+    # Re-sort dataframe by 'ID'
+    #df = df.sort_values(by=['ID'])
+
+    return df
+
+def make_pmt(df, pmt_id, pmt_x, pmt_y, name):
+    df_new_pmt = pd.DataFrame({'Img': df['Img'].iloc[0], 'ID': pmt_id.zfill(5)+"-00", 'X': pmt_x, 'Y': pmt_y, 'Name': name, 'R': np.nan, 'theta': np.nan}, index=[0])
+    df = pd.concat([df, df_new_pmt], ignore_index=True)
+
+    #df = df.sort_values(by=['ID'])
+    print("Inserted your new PMT", df.tail(1))
     
-    except Exception as e:
-        print(e)
+    # recalculate all bolts for this PMT
+    #df_bolts = df[df['ID'].apply(lambda id: (id[:5] == pmt_id) & (float(id[-2:]) > 0))]
+    
+    return df
+
+def move_feature(df, start_pt, end_pt, name):
+
+    # Delete the feature at the start point
+    df_feature = del_point(df, start_pt[0], start_pt[1])
+    feature_ID = df_feature['ID'].iloc[0]
+    #print("Feature being moved is ", feature_ID)
+
+    # If the feature being moved is a PMT
+    if str(feature_ID).endswith('00'):
+        df = make_pmt(df, feature_ID[:5], end_pt[0], end_pt[1], name)
+    
+    # Bolt    
+    else:
+        df = make_bolt(df, end_pt[0], end_pt[1], name)
+    
+    return df
+
+def plot_labels(graph, df):
+
+    labels = []
+
+    # Loop over all points in the dataframe
+    for index, row in df.iterrows(): 
+
+        pmt_id = row[1][:5]
+        bolt_id = row[1][-2:]
+        draw_x = row[2]
+        draw_y = row[3]
+        color = 'red' if bolt_id == '00' else 'yellow'
+        text = pmt_id if bolt_id == '00' else bolt_id
+        
+        labels.append(graph.DrawText(text=text, location=(draw_x-10, draw_y-10), color=color))
+        
+    return labels
       
         
-def erase_labels(graph, pmt_labels, bolt_labels):
-    try:
-        for i in range(len(pmt_labels)):
-            graph.delete_figure(pmt_labels[i])
-            graph.delete_figure(bolt_labels[i])
-    except Exception as e:
-        print(e)
-        
-        
-# def autolabel_SK_pts(pmt_loc, dict_name, i):
-#     if dict_name["X"][i] = 
+def erase_labels(graph, labels):
+
+    for label in labels:
+        graph.delete_figure(label)
         
 def get_marker_center(graph, fig):
     current_coords = graph.get_bounding_box(fig)
     curr_x = (current_coords[0][0] + current_coords[1][0])/2
     curr_y = (current_coords[0][1] + current_coords[1][1])/2
     return curr_x, curr_y
+    
+
 #%%  
     # for i in range(len(dict_name["ID"])):
     #     for j in range(len(suffix)):
