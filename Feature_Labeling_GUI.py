@@ -62,6 +62,7 @@ mov_col = [[sg.T('Choose what you want to do:', enable_events=True)],
            [sg.R('Move Everything', 1, key='-MOVEALL-', enable_events=True)],
            [sg.R('Move Stuff', 1, key='-MOVE-', enable_events=True)],
            [sg.R("Auto-label", 1, key='-LABELING-', enable_events=True)],
+           [sg.R('Cursor Position (Click & Hold)', 1,  key='-SCAN_POSITION-', enable_events=True)],
            ]
 
 column = [[sg.Graph(canvas_size = (var.width, var.height), graph_bottom_left = (0,0), graph_top_right = (var.width,var.height), 
@@ -106,15 +107,22 @@ def main():
     location = 0
     
     graph = window["-GRAPH-"] 
-    
-    name = input("Please enter your initials. ")
 
+    name = None
+    while name is None:    
+        name = sg.popup_get_text('Please enter your initials', title="Name initials")
+        
+    Img_ID = None
+    
     dragging = False
     made_point = False
     start_pt = end_pt = None
     ids = None ## used to specify which figure on sg.Graph to delete
     pmt1 = None
-        
+    pts_dir = None
+    df = None
+    labels = []
+    
     while True:
         event, values = window.read()
         ## 'event' is the key string of whichever element user interacts with
@@ -144,15 +152,17 @@ def main():
                 window["-COL-"].contents_changed()
                 
                 ## Tries to overlay points if the image has associated coordinate file
-                x_overlay, y_overlay, id_overlay, pts_fname, coord_dict = func.autoload_pts(values, graph, filename, name)
-                print("Length of polar coordinate lists", len(coord_dict["R"]))
-                ## ids, x and y coordinates already added to dictionary
-                ## can add feature number here but for now, no use
-                coord_dict["Img"].append(filename)
-                
-                if filename not in coord_dict["Img"]:
-                    i=1 ## counter for feature number
-        
+                pts_dir = os.path.join(os.path.dirname(values["-FOLDER-"]), 'points')
+                pts_file = os.path.basename(filename).split('.')[0]
+                pts_fname = os.path.join(pts_dir, pts_file) + ".txt" 
+
+                df = func.autoload_pts(pts_fname)
+                Img_ID = df['Img'].iloc[0]
+                func.draw_pts(graph, df)
+                func.erase_labels(graph, labels)                
+                labels = func.plot_labels(graph, df)
+
+                                        
         if event == "-NEXT-" or event == "-PREV-":
             
             if ids is not None:
@@ -162,18 +172,17 @@ def main():
             location=1
             if event == "-PREV-":
                 location=-1
+
             image, pil_image, filename, ids = func.disp_image(window, values, fnames, location=location)
             pmt1 = None ##to allow autolabeling again
             window.refresh()
             window["-COL-"].contents_changed()
             
-            x_overlay, y_overlay, id_overlay, pts_fname, coord_dict = func.autoload_pts(values, graph, filename, name)
-            
-            coord_dict["Img"].append(filename)
-            coord_dict["Name"].append(input("Please enter your initials."))
-            
-            if filename not in coord_dict["Img"]:
-                i=1 ## counter for feature number
+            pts_file = os.path.basename(filename).split('.')[0]
+            pts_fname = os.path.join(pts_dir, pts_file) + ".txt"             
+            df = func.autoload_pts(values, graph, pts_fname)
+            Img_ID = df['Img'].iloc[0]
+            func.draw_pts(graph, df)
         
 ## =============== Annotation Features ========================            
             
@@ -185,78 +194,54 @@ def main():
         if event == "-GRAPH-":
 
             x, y = values["-GRAPH-"]
-            
+            window["-INFO-"].update(value=f'({x}, {y})')
+
             if not dragging:
                 dragging = True
-                drag_figures = graph.get_figures_at_location((x,y))
+                figures = graph.get_figures_at_location((x,y))
 
-                for fig in drag_figures:
+                for fig in figures:
                     start_pt = func.get_marker_center(graph, fig)
             else:
                 end_pt = x, y
-                for fig in drag_figures[1:]:
+                for fig in figures[1:]:
                     end_pt = func.get_marker_center(graph, fig)      
-                
 
             if values['-MOVE-']:
-                if len(drag_figures)==1:  ## ignoring the background image from the tuple of objects that can be dragged
-                    pass;
-                elif len(drag_figures)>1: 
-                    fig = drag_figures[1]
+
+                ## ignoring the background image from the tuple of objects that can be dragged
+                if len(figures)>1: 
+                    fig = figures[1]
                     curr_x, curr_y = func.get_marker_center(graph, fig)
+                    
                     graph.move_figure(fig, x - curr_x, y - curr_y)  ## start with marker centered on cursor
+                      
                     graph.update()
-
-            elif values['-ERASE-']:
-                
-                try:
-                    delete_figure = graph.get_figures_at_location(values['-GRAPH-'])
-                    if len(delete_figure) == 1:
-                        pass;
-                    if len(delete_figure)>1:
-                        for figure in delete_figure[1:]:
-                            graph.delete_figure(figure)
-                            del_x, del_y = func.get_marker_center(graph, figure)
-                            func.del_figs(del_x, del_y, coord_dict)
-                except Exception as e:
-                    print(e)
-
             
             elif (values["-PMT_POINT-"] or values["-BOLT_POINT-"]) and not made_point:
                 
-                ## drawing PMT point
-                if values["-PMT_POINT-"]:
-                    graph.draw_point((x,y), color = 'red', size=8)
-                    
-                    pmt_id = input("Please enter PMT ID.")
-                    coord_dict["ID"].append(pmt_id)
-                    coord_dict["X"].append(x)
-                    coord_dict["Y"].append(y)
-                    coord_dict["Name"].append(name)
+                try:
+                    ## drawing PMT point
+                    if values["-PMT_POINT-"]:                    
+                        pmt_id = sg.popup_get_text('Please enter PMT ID', title="Adding PMT")
+                        if pmt_id:
+                            df = func.make_pmt(df, pmt_id, x, y, name)
+                            graph.draw_point((x,y), color = 'red', size=8)
 
-                ## drawing bolt point
-                elif values["-BOLT_POINT-"]:
-                    try: 
-                        new_bolt = graph.draw_point((x,y), color = 'yellow', size =8)
-                        print("Drew your new point.")
+                    ## drawing bolt point
+                    elif values["-BOLT_POINT-"]:
+
                         ## checks which pmt the bolt belongs to and returns ID of the PMT
-                        ## along with the angle between the dynode and the bolt
-                        
-                    except Exception as e:
-                        print(e)
-                        print("Didn't draw your point.")
-    
-                    try:
-                        pmt_id, bolt_label = func.bolt_labels(coord_dict, x, y, name)
-                        print("Successfully added bolt ", bolt_label)
+                        ## along with the angle between the dynode and the bolt    
+                            df = func.make_bolt(df, x, y, name)
+                            graph.draw_point((x,y), color = 'yellow', size=8)
                     
-                    except Exception as e:
-                        print(e)
-                        print("Your last point could not be added. Please try again.")
-                        graph.delete_figure(new_bolt)
+                    window["-INFO-"].update(value=f'Made point {df["ID"].iloc[-1]} at ({x}, {y})')
+                    made_point = True
 
-                window["-INFO-"].update(value=f'Made point at ({x}, {y})')
-                made_point = True
+                except Exception as e:
+                    print(e)
+                    window["-INFO-"].update(value=f'Failed point at ({x}, {y})')
                 
     ## ================== AUTO LABELING ===============================
             
@@ -362,23 +347,27 @@ def main():
             
             if values['-MOVE-']:
                 
-                try:               
-                    window["-INFO-"].update(value=f"Moved point from {start_pt} to {end_pt}")
-                    
-                    for i in range(len(coord_dict["X"])):
-                        if coord_dict["X"][i] == start_pt[0] and coord_dict["Y"][i] == start_pt[1]:
-                            coord_dict["X"][i] = end_pt[0]
-                            coord_dict["Y"][i] = end_pt[1]
-                            for j, d in func.reverseEnum(coord_dict["ID"]):
-                                if str(d)[:5] == str(coord_dict["ID"][i])[:5] and str(d).endswith('00'):
-                                    pmt_x, pmt_y = coord_dict["X"][j], coord_dict["Y"][j]
-                                    coord_dict["R"][i] = np.sqrt((coord_dict["X"][i] - pmt_x)**2 + (coord_dict["Y"][i] - pmt_y)**2)
-                                    coord_dict["theta"][i] = func.angle_to((pmt_x, pmt_y), (coord_dict["X"][i], coord_dict["Y"][i]))
-                                    
+                try:
+                    df = func.move_feature(df, start_pt, end_pt, name)
+                    window["-INFO-"].update(value=f"Moved point {df['ID'].iloc[-1]} from {start_pt} to {end_pt}")
+
                 except Exception as e:
                     print(e)
-                        
-            dragging = False        
+                    
+            elif values['-ERASE-']:
+                try:
+                    if len(figures)>1:
+                        graph.delete_figure(fig)
+                        df_erased_feature = func.del_point(df, start_pt[0], start_pt[1])
+                        window["-INFO-"].update(value=f"Erased point {df_erased_feature['ID'].iloc[0]}")
+
+                except Exception as e:
+                    print(e)
+                    
+            func.erase_labels(graph, labels)                
+            labels = func.plot_labels(graph, df)
+                
+            dragging = False
 
         elif event.endswith('+MOTION+'):
             window["-INFO-"].update(value=f"Mouse freely moving {values['-GRAPH-']}")
@@ -386,20 +375,9 @@ def main():
 ## =========================== Overlaying known coordinates =======================        
 
         if event == "-OVERLAY-": ## if we want to overlay known coordinates on an image
+
             print(values["-OVERLAY-"])
-            x_overlay, y_overlay, id_overlay = func.overlay_pts(values["-OVERLAY-"])
-            for i in range(len(x_overlay)):
-                if str(id_overlay[i]).endswith('00'):
-                    id_overlay[i] = graph.draw_point((x_overlay[i], y_overlay[i]), color = 'red', size=10)
-                    coord_dict["ID"].append(id_overlay[i])
-                    coord_dict["X"].append(x_overlay[i])
-                    coord_dict["Y"].append(y_overlay[i])
-                else:
-                   id_overlay[i] = graph.draw_point((x_overlay[i], y_overlay[i]), color = 'yellow', size = 8)
-                   coord_dict["ID"].append(id_overlay[i])
-                   coord_dict["X"].append(x_overlay[i])
-                   coord_dict["Y"].append(y_overlay[i])
-        
+            # This needs to be re-written following the same method as the above func.autoload_pts
 
 ## ======================== Menubar functions =======================================        
         
@@ -413,38 +391,34 @@ def main():
             # func.save_element_as_file(column, annotate_fname)
             
         elif event == '-PLOT_LABEL-':
-            pmt_labels, bolt_labels = func.plot_labels(coord_dict, graph)
-            
-                
+            func.erase_labels(graph, labels)                
+            labels = func.plot_labels(graph, df)
             
         elif event == '-ERASE_LABEL-':
-            func.erase_labels(graph, pmt_labels, bolt_labels)
+            func.erase_labels(graph, labels)
         
         elif event == '-CSV-':
+            folder = os.path.join(os.path.dirname(values["-FOLDER-"]),'Annotation_Coordinates')
+            output_filepath = os.path.join(folder, os.path.basename(os.path.splitext(filename)[0])+".txt")
+
             try:
-                func.write_coords_to_csv(coord_dict, filename, values)
-                print("Annotations saved!")
+                func.write_coords_to_csv(df, output_filepath)
+                
             except Exception as e:
                 print(e)
-                print("Did not save. Check that the file is not open.")
-
+                sg.popup_ok("Could not save. Check terminal messages.")
             
         # elif event == 'Shift R':
             
-        
+        # This doesn't seem to do anything yet
         elif event == '&Undo point':
             
             try:
-                if len(coord_dict) > 0: 
-                    delete_figure = graph.get_figures_at_location(values['-GRAPH-'])
-                   
-                    for figure in delete_figure[1:]:
-                            
-                        for k, v in coord_dict.items():
-                            print(len(coord_dict))
-                            v.pop() ## remove the last point from the dictionary of point coordinates
-                            print(len(coord_dict))
-                        graph.delete_figure(figure)
+                graph.delete_figure(fig)
+
+                # Delete the last row of dataframe
+                df = df[:-1]
+                
             except:
                 pass
                     
@@ -464,7 +438,7 @@ def main():
             data = func.resize(window, im_array, scale)
             func.change_canvas_size(window, graph, scale)
             graph.draw_image(data=data, location=(0,var.height))
-            func.redraw_pts(coord_dict, graph, scale)
+            func.draw_pts(graph, df, scale)
             
                 
             # except:
@@ -474,3 +448,5 @@ def main():
     window.close() ## For when the user presses the Exit button
     
 main()
+
+# %%
