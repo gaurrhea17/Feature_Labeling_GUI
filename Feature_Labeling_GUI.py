@@ -55,6 +55,7 @@ mov_col = [[sg.T('Choose what you want to do:', enable_events=True)],
            [sg.R('Draw PMT points', 1,  key='-PMT_POINT-', enable_events=True)],
            [sg.R('Draw bolt points', 1,  key='-BOLT_POINT-', enable_events=True)],
            [sg.R('Erase item', 1, key='-ERASE-', enable_events=True)],
+           [sg.R('Modify label', 1, key='-MODIFY-', enable_events=True)],
            [sg.R('Erase all', 1, key='-CLEAR-', enable_events=True)],
            [sg.R('Send to back', 1, key='-BACK-', enable_events=True)],
            [sg.R('Bring to front', 1, key='-FRONT-', enable_events=True)],
@@ -418,8 +419,8 @@ def main():
             if values['-MOVE-']:
                 
                 try:
-                    df = func.move_feature(df, start_pt, end_pt, name)
-                    window["-INFO-"].update(value=f"Moved point {df['ID'].iloc[-1]} from {start_pt} to {end_pt}")
+                    df_feature = func.move_feature(df, start_pt, end_pt, name)
+                    window["-INFO-"].update(value=f"Moved point {df_feature['ID'].iloc[0]} from {start_pt} to {end_pt}")
 
                 except Exception as e:
                     print(e)
@@ -428,12 +429,25 @@ def main():
                 try:
                     if len(figures)>1:
                         graph.delete_figure(fig)
-                        df_erased_feature = func.del_point(df, start_pt[0], start_pt[1])
+                        df_erased_feature = func.del_point(df, start_pt)
                         window["-INFO-"].update(value=f"Erased point {df_erased_feature['ID'].iloc[0]}")
 
                 except Exception as e:
                     print(e)
                     
+            elif values['-MODIFY-']:
+                try:
+                    id_new = None
+                    id_new = sg.popup_get_text('Please enter new ID (#####-## format)', title="Modifying Label")
+                    if id_new:
+                        df_modded_feature = func.modify_label(df, start_pt, id_new)
+                        # Print the ID of the updated dataframe and the ID of the original dataframe
+                        
+                        window["-INFO-"].update(value=f"Updated ID from {df_modded_feature['ID'].iloc[0]} to index {df.loc[df_modded_feature.index, 'ID']}")
+
+                except Exception as e:
+                    print(e)
+
             func.erase_labels(graph, labels)                
             labels = func.plot_labels(graph, df, undistort)
                 

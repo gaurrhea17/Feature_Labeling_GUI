@@ -457,13 +457,56 @@ def overlay_pts(fname):
                      names=["Img", "ID", "X", "Y", "Undistort_X", "Undistort_Y", "Name", "R", "theta"])
     return df
 
-
-def del_point(df, x, y):
-    df_feature = df[(df['X'] == x) & (df['Y'] == y)]
-
+def get_current_feature(df, position):
+    df_feature = df[(df['X'] == position[0]) & (df['Y'] == position[1])]
+    
     if len(df_feature.index) == 0:
         print("No feature found at this location!")
         raise
+    
+    return df_feature
+
+def recalculate_one_bolt(df, df_feature, id_new):
+    ## Get PMT ID associated to this bolt
+    PMT_ID = id_new[:-2] + '00'
+    df_pmt = df.loc[df['ID'] == PMT_ID]
+
+    if len(df_pmt.index) == 0:
+        print("No PMT found with ID " + PMT_ID)
+        raise
+    
+    elif len(df_pmt.index) > 1:
+        print("Unexpected duplicate PMT_ID " + PMT_ID)
+        raise
+
+    bolt_x = float(df_feature['X'].iloc[0])
+    bolt_y = float(df_feature['Y'].iloc[0])
+    pmt_x = float(df_pmt['X'].iloc[0])
+    pmt_y = float(df_pmt['Y'].iloc[0])
+    bolt_r, theta = calc_bolt_properties(bolt_x, bolt_y, pmt_x, pmt_y)
+
+    df.loc[df_feature.index, 'R'] = bolt_r
+    df.loc[df_feature.index, 'theta'] = theta    
+    
+def modify_label(df, position, id_new):
+    df_feature = get_current_feature(df, position)
+    
+    # Directly modify ID of feature in original dataframe
+    #df_feature.at[df_feature.index[0], 'ID'] = id_new
+    df.loc[df_feature.index, 'ID'] = id_new
+
+    # Update bolt_r and theta for this feature if it is a bolt
+    if not str(id_new).endswith('00'):
+        recalculate_one_bolt(df, df_feature, id_new)    
+        
+    # Warning: no treatment of existing bolts if modified label is a PMT
+    # But probably want to use a function that changes all the previous bolt labels, if any
+    # (i.e from the new PMT auto-labeling function)
+    
+    return df_feature
+
+def del_point(df, position):
+    df_feature = get_current_feature(df, position)
 
     df.drop(df_feature.index, inplace=True)
 
@@ -523,40 +566,21 @@ def angle_to(p1, p2, rotation=270, clockwise=False):
         angle = -angle
     return angle % 360
 
-
 def get_closest_pmt(df, x, y):
     df_pmts = df[df['ID'].apply(lambda feature_id: float(feature_id[-2:]) == 0)]
     df_closest = df_pmts.iloc[((df_pmts['X'] - x) ** 2 + (df_pmts['Y'] - y) ** 2).argsort()[:1]]
-    df_closest_2 = df_pmts.iloc[((df_pmts['X'] - x) ** 2 + (df_pmts['Y'] - y) ** 2).argsort()[:2]]
-    pmt_id, pmt_id_2 = df_closest['ID'].iloc[0][:5], df_closest_2['ID'].iloc[1][:5]
-    pmt_x, pmt_x_2 = df_closest['X'].iloc[0], df_closest_2['X'].iloc[1]
-    pmt_y, pmt_y_2 = df_closest['Y'].iloc[0], df_closest_2['Y'].iloc[1]
-
-    edge_x = var.width/4
-    edge_y = var.height/4
-
-    # condition that if x and y are close to any edge of the image
-    if x <= edge_x or x >= var.width - edge_x or y <= edge_y or y >= var.height - edge_y:
-
-        # ask user to confirm if the closest PMT is correct
-        print("The closest PMT is ", pmt_id)
-        print("The second closest PMT is ", pmt_id_2)
-
-        # user pysimplegui popup_get_text popup window to ask the user if '1' or '2' is the correct PMT
-        correct_pmt = sg.popup_get_text('Which PMT is the correct one? For the closest PMT, enter 1, for the second closest PMT, enter 2')
-
-        # if user enters '1', then the closest PMT is pmt_id, otherwise it is pmt_id_2
-        if correct_pmt == '1':
-            pmt_id = pmt_id
-            pmt_x = pmt_x
-            pmt_y = pmt_y
-        else:
-            pmt_id = pmt_id_2
-            pmt_x = pmt_x_2
-            pmt_y = pmt_y_2
+    pmt_id = df_closest['ID'].iloc[0][:5]
+    pmt_x = df_closest['X'].iloc[0]
+    pmt_y = df_closest['Y'].iloc[0]
 
     return pmt_id, pmt_x, pmt_y
 
+def calc_bolt_properties(bolt_x, bolt_y, pmt_x, pmt_y):
+    bolt_to_pmt = (bolt_x - pmt_x, bolt_y - pmt_y)
+    bolt_r = np.sqrt(bolt_to_pmt[0] ** 2 + bolt_to_pmt[1] ** 2)
+    theta = angle_to((bolt_x, bolt_y), (pmt_x, pmt_y))
+    
+    return bolt_r, theta    
 
 def make_bolt(df, bolt_x, bolt_y, name):
     ## Find which PMT the bolt is closest to
@@ -574,9 +598,7 @@ def make_bolt(df, bolt_x, bolt_y, name):
         raise Exception("Already reached max number of bolts for this PMT! Erase a bolt first.")
 
     ## calculate angle between PMT center and bolt
-    bolt_to_pmt = (bolt_x - pmt_x, bolt_y - pmt_y)
-    bolt_r = np.sqrt(bolt_to_pmt[0] ** 2 + bolt_to_pmt[1] ** 2)
-    theta = angle_to((bolt_x, bolt_y), (pmt_x, pmt_y))
+    bolt_r, theta = calc_bolt_properties(bolt_x, bolt_y, pmt_x, pmt_y)
     # print(f"Angle between PMT and bolt {theta}")
 
     # Get entry in df_bolts with value closest to 'theta'
@@ -612,6 +634,8 @@ def make_bolt(df, bolt_x, bolt_y, name):
 
     New_ID = pmt_id.zfill(5) + bolt_label
 
+    check_existing_id(df, New_ID)
+
     # append new row to dataframe
     df_new_bolt = pd.DataFrame(
         {'Img': df['Img'].iloc[0], 'ID': New_ID, 'X': bolt_x, 'Y': bolt_y, 'Name': name, 'R': bolt_r, 'theta': theta},
@@ -621,42 +645,63 @@ def make_bolt(df, bolt_x, bolt_y, name):
 
     print("Inserted your new bolt", df.tail(1))
 
-    # Re-sort dataframe by 'ID'
-    # df = df.sort_values(by=['ID'])
-
     return df
 
 
 def make_pmt(df, pmt_id, pmt_x, pmt_y, name):
+
+    New_ID = pmt_id.zfill(5) + "-00"
+
+    check_existing_id(df, New_ID)
+
     df_new_pmt = pd.DataFrame(
-        {'Img': df['Img'].iloc[0], 'ID': pmt_id.zfill(5) + "-00", 'X': pmt_x, 'Y': pmt_y, 'Name': name, 'R': np.nan,
+        {'Img': df['Img'].iloc[0], 'ID': New_ID, 'X': pmt_x, 'Y': pmt_y, 'Name': name, 'R': np.nan,
          'theta': np.nan}, index=[0])
     df = pd.concat([df, df_new_pmt], ignore_index=True)
 
     # df = df.sort_values(by=['ID'])
     print("Inserted your new PMT", df.tail(1))
 
-    # recalculate all bolts for this PMT
-    # df_bolts = df[df['ID'].apply(lambda id: (id[:5] == pmt_id) & (float(id[-2:]) > 0))]
+    # recalculate all bolt properties for this PMT
+    recalculate_all_bolts(df, New_ID, pmt_x, pmt_y)
 
     return df
 
+def recalculate_all_bolts(df, New_ID, pmt_x, pmt_y):
+    
+    df_bolts = df[df['ID'].apply(lambda id: (id[:5] == New_ID[:5]) & (float(id[-2:]) > 0))]
 
+    # Modify R and theta in df_bolts
+    for index, row in df_bolts.iterrows():
+        bolt_r, theta = calc_bolt_properties(row['X'], row['Y'], pmt_x, pmt_y)
+        df.loc[index, 'R'] = bolt_r
+        df.loc[index, 'theta'] = theta
+
+def check_existing_id(df, new_id):
+    if new_id in df['ID'].values:
+        print ("ID already exists:", new_id)
+        raise Exception("ID already exists! Please check existing bolt labels or choose a different PMT ID.")
+    
 def move_feature(df, start_pt, end_pt, name):
-    # Delete the feature at the start point
-    df_feature = del_point(df, start_pt[0], start_pt[1])
+
+    df_feature = get_current_feature(df, start_pt)
+
+    # Modify X and Y in df_feature and reflect in original df
+    df.loc[df_feature.index, 'X'] = end_pt[0]
+    df.loc[df_feature.index, 'Y'] = end_pt[1]
+
     feature_ID = df_feature['ID'].iloc[0]
     # print("Feature being moved is ", feature_ID)
 
     # If the feature being moved is a PMT
     if str(feature_ID).endswith('00'):
-        df = make_pmt(df, feature_ID[:5], end_pt[0], end_pt[1], name)
+        recalculate_all_bolts(df, feature_ID, end_pt[0], end_pt[1])
 
     # Bolt    
     else:
-        df = make_bolt(df, end_pt[0], end_pt[1], name)
+        recalculate_one_bolt(df, df_feature, feature_ID)
 
-    return df
+    return df_feature
 
 
 def plot_labels(graph, df, undistort):
