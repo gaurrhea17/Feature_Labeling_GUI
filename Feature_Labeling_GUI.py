@@ -266,7 +266,7 @@ def main():
             elif values["-LABELING-"]:
 
                 if first_pmt == None:
-                    sg.popup_ok(("You selected your first PMT."))
+                    #sg.popup_ok(("You selected your first PMT."))
 
                     try:
                         # get figure at location
@@ -492,13 +492,16 @@ def main():
         
         elif event == '-CSV-':
             folder = os.path.join(os.path.dirname(values["-FOLDER-"]),'Annotation_Coordinates')
+            
+            # Make folder if it doesn't exist
+            if not os.path.exists(folder):
+                os.makedirs(folder)
+            
             output_filepath_txt = os.path.join(folder, os.path.basename(os.path.splitext(filename)[0])+".txt")
-            output_filepath_csv = os.path.join(folder, os.path.basename(os.path.splitext(filename)[0])+".csv")
             
             try:
                 
-                func.write_coords_to_csv(df, output_filepath_txt)
-                func.write_coords_to_csv(df, output_filepath_csv)
+                func.write_coords_to_file(df, output_filepath_txt)
                 
             except Exception as e:
                 print(e)

@@ -425,7 +425,7 @@ def overlay_pts(fname):
     return df
 
 def get_current_feature(df, position):
-    df_feature = df[(df['X'] == position[0]) & (df['Y'] == position[1])]
+    df_feature = df[(round(df['X']) == round(position[0])) & (round(df['Y']) == round(position[1]))]
 
     if len(df_feature.index) == 0:
         print("No feature found at this location!")
@@ -516,6 +516,10 @@ def duplicate_check(df):
 def write_coords_to_file(df, filename):
     df = duplicate_check(df)
     df = df.sort_values(by=['ID'])
+
+    # Write X/Y column with precision 
+    df['X'] = df['X'].map(lambda x: '{:.1f}'.format(x))
+    df['Y'] = df['Y'].map(lambda y: '{:.1f}'.format(y))
 
     headers = ["Img", "ID", "X", "Y", "Name"]
     df[headers].to_csv(filename, index=False, header=False, sep='\t')
@@ -700,18 +704,6 @@ def get_marker_center(graph, fig):
     curr_x = (current_coords[0][0] + current_coords[1][0]) / 2
     curr_y = (current_coords[0][1] + current_coords[1][1]) / 2
     return curr_x, curr_y
-
-
-def get_pmt(df, curr_x, curr_y):
-    df_pmts = df[df['ID'].apply(lambda id: (id[-2:] == '00'))]
-    for index, row in df_pmts.iterrows():
-        pmt_x = float(row[2])
-        pmt_y = float(row[3])
-        if round(pmt_x) == curr_x and round(pmt_y) == curr_y:
-            # print PMT ID for this point
-            print("PMT ID is ", row[1])
-            return row[1]
-
 
 def autolabel(df, new_ref, label):
 
