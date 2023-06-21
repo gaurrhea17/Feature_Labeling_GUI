@@ -680,12 +680,8 @@ def plot_labels(graph, df, undistort):
         pmt_id = str(row[1])[:5]
         bolt_id = str(row[1])[-2:]
 
-        if undistort:
-            draw_x = row[4]
-            draw_y = row[5]
-        if not undistort:
-            draw_x = row[2]
-            draw_y = row[3]
+        draw_x = row[2]
+        draw_y = row[3]
         color = 'red' if bolt_id == '00' else 'yellow'
         text = pmt_id if bolt_id == '00' else bolt_id
 

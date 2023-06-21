@@ -275,7 +275,9 @@ def main():
                         print("Coordinates of selected PMT: ", curr_x, curr_y)
 
                         # look for curr_x and curr_y in the dataframe
-                        first_pmt = func.get_pmt(df, curr_x, curr_y)
+                        curr_pos = (curr_x, curr_y)
+                        df_feature = func.get_current_feature(df, curr_pos)
+                        first_pmt = df_feature['ID'].iloc[0]
 
                         # insert column after df['ID'] column with name 'Labels' in the dataframe
                         df.insert(2, 'Labels', 'None')
@@ -287,28 +289,38 @@ def main():
                         df.at[index, 'Labels'] = label
 
                         # finds PMT in dataframe and the other PMTs in the same row and column. Labels the row and column PMTs.
-                        df, new_ref, row, column = func.autolabel(df, first_pmt, label)
+                        df, new_ref, row1, column1 = func.autolabel(df, first_pmt, label)
 
-                        print("Row and column ", row, column)
-                        col_len = len(column)
+                        print("Row and column ", row1, column1)
+                        col_len = len(column1)
+                        row_len = len(row1)
 
                         count = 0
-                        while count < col_len:
+                        while count < col_len or count < row_len:
 
-                            # look for the next PMT in the 'column'
-                            index = df[df['ID'] == column[0]].index[0]
+                            if count < col_len:
+                                # look for the next PMT in the 'column1'
+                                index = df[df['ID'] == column1[count]].index[0]
+                                # get the ID of the PMT at index and label
+                                new_ref = df['ID'].iloc[index]
+                                new_label = df['Labels'].iloc[index]
+                                print("New reference PMT from column: ", new_ref, "and label: ", new_label)
 
-                            # get the ID of the PMT at the index and its label
-                            new_ref = df['ID'].iloc[index]
-                            print("New reference PMT: ", new_ref)
-                            new_label = df['Labels'].iloc[index]
-                            print("New reference PMT label: ", new_label)
+                                # autolabeling PMTs in the same row as new_ref
+                                df, new_ref, row, column = func.autolabel(df, new_ref, new_label)
 
-                            df, new_ref, row, column = func.autolabel(df, new_ref, new_label)
-                            print("Row and column ", row, column)
+                            if count < row_len:
+                                # look for next PMT in the 'row1'
+                                index2 = df[df['ID'] == row1[count]].index[0]
+                                # get the ID of the PMT at index2 and label
+                                new_ref2 = df['ID'].iloc[index2]
+                                new_label2 = df['Labels'].iloc[index2]
+                                print("New reference PMT from row: ", new_ref2, "and label: ", new_label2)
+
+                                # autolabeling PMTs in the same column as new_ref2
+                                df, new_ref2, row, column = func.autolabel(df, new_ref2, new_label2)
+
                             count +=1
-                            print("Count: ", count)
-
 
                         print("Final dataframe with all labels. ", df.to_string())
 
@@ -347,71 +359,6 @@ def main():
                         print(e)
                         window["-INFO-"].update(value=f'Failed to auto label PMTs')
 
-
-                        # ## trying geopandas for creating a grid
-                        # parse_data = [[item['Img'], item['ID'], item['SK'], item['X'], item['Y'], item['R'], item['theta'], item['Name']] for item in coord_dict]
-                        # df = pd.DataFrame(coord_dict=parse_data, columns=['Img', 'ID', 'SK', 'X', 'Y', 'R', 'theta', 'Name'])
-                        # pmt_plot = gdf.GeoDataFrame(df, geometry=geopandas.points_from_xy(df.X, df.Y))
-                        # pmt_plot.head()
-
-
-                        ## place points inside a pseudo regular grid
-                    #
-                    #     nodesx = 100
-                    #     sizex=20
-                    #     sizey=20
-                    #     firstx = min(coord_dict["X"])-20
-                    #     firsty = min(coord_dict["Y"])-20
-                    #
-                    #     new, xt, yt = [], [], []
-                    #     for i in point_coords:
-                    #         xo = int((i[0]-firstx)/sizex) ## gives x grid cell size
-                    #         yo = int((i[1]-firsty)/sizey)
-                    #         new.append(nodesx*yo + xo)
-                    #         xt.append(i[0])
-                    #         yt.append(i[1])
-                    #
-                    #     sort_points = [x for (y,x) in sorted(zip(new, point_coords))]
-                    #
-                    #     ## index for where we have our identified PMT in sorted list
-                    #     pmt_idx = np.where(np.array(point_coords) == first_pmt)[0][0]
-                    #     print("The coordinates are apparently ", xt[pmt_idx], yt[pmt_idx])
-                    #     print("Index where we labeled our PMT", pmt_idx)
-                    #
-                    #     # label_list = [0.0]*len(new)
-                    #     # label_list[pmt_idx] = first_label
-                    #
-                    #     # for i, e in reversed(list(enumerate(label_list[0:pmt_idx]))):
-                    #     #     if new[i]
-                    #
-                    #
-                    #     plt.scatter(xt, yt)
-                    #
-                    #
-                    #
-                    #     for i in range(len(sort_points)):
-                    #         plt.text(sort_points[i][0], sort_points[i][1], str(i))
-                    #
-                    #     plt.show()
-                    #
-                    #     ## meshgrid method
-                    #     xv, yv = np.meshgrid(x,y,sparse=True)
-                    #     # pmt_idx = np.argwhere((xv == first_pmt[0]) & (yv == first_pmt[1]))
-                    #     # print("Grid index of identified point, ", pmt_idx)
-                    #     fig = plt.figure()
-                    #     ax = fig.add_subplot(111)
-                    #     ax.plot(xv[0,:], yv[:,0], marker='o', color='k', linestyle='none')
-                    #     for xy in zip(xv[0,:], yv[:,0]):
-                    #         ax.annotate('(%s, %s)' % xy, xy=xy, textcoords='data')
-                    #     ax.grid
-                    #     # plt.plot(np.diag(xv), np.diag(yv), marker='o', color='k', linestyle='none')
-                    #     plt.show()
-                    #
-                    # except Exception as e:
-                    #     print(e)
-                    #     print("Autolabeling did not work. Please try selecting a PMT again.")
-                    #
-                    #
         elif event.endswith('+UP'):
             
             made_point = False
