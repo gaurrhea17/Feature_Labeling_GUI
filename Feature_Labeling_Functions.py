@@ -433,9 +433,12 @@ def get_current_feature(df, position):
 
     return df_feature
 
-def recalculate_one_bolt(df, df_feature, id_new):
+def recalculate_one_bolt(df, df_feature):
+    
+    feature_ID = df.at[df_feature.index[0], 'ID']
+    
     ## Get PMT ID associated to this bolt
-    PMT_ID = id_new[:-2] + '00'
+    PMT_ID = feature_ID[:-2] + '00'
     df_pmt = df.loc[df['ID'] == PMT_ID]
 
     if len(df_pmt.index) == 0:
@@ -459,12 +462,11 @@ def modify_label(df, position, id_new):
     df_feature = get_current_feature(df, position)
 
     # Directly modify ID of feature in original dataframe
-    #df_feature.at[df_feature.index[0], 'ID'] = id_new
     df.loc[df_feature.index, 'ID'] = id_new
 
     # Update bolt_r and theta for this feature if it is a bolt
     if not str(id_new).endswith('00'):
-        recalculate_one_bolt(df, df_feature, id_new)
+        recalculate_one_bolt(df, df_feature)
 
     # Warning: no treatment of existing bolts if modified label is a PMT
     # But probably want to use a function that changes all the previous bolt labels, if any
@@ -515,15 +517,9 @@ def write_coords_to_file(df, filename):
     df = duplicate_check(df)
     df = df.sort_values(by=['ID'])
 
-    filename.endswith('.txt'):
     headers = ["Img", "ID", "X", "Y", "Name"]
     df[headers].to_csv(filename, index=False, header=False, sep='\t')
     print("Saved .txt annotations: ", filename)
-    # elif filename.endswith('.csv'):
-    #     headers = ["Img", "ID", "X", "Y", "Undistort_X", "Undistort_Y", "Name", "R", "theta"]
-    #     df[headers].to_csv(filename, index=False, header=True)
-    #     print("Saved .csv annotations: ", filename)
-
 
 def angle_to(p1, p2, rotation=270, clockwise=False):
     angle = math.degrees(math.atan2(p2[1] - p1[1], p2[0] - p1[0])) - rotation
@@ -655,7 +651,8 @@ def move_feature(df, start_pt, end_pt, name):
     # Modify X and Y in df_feature and reflect in original df
     df.loc[df_feature.index, 'X'] = end_pt[0]
     df.loc[df_feature.index, 'Y'] = end_pt[1]
-
+    df.loc[df_feature.index, 'Name'] = name
+    
     feature_ID = df_feature['ID'].iloc[0]
     # print("Feature being moved is ", feature_ID)
 
@@ -665,7 +662,7 @@ def move_feature(df, start_pt, end_pt, name):
 
     # Bolt    
     else:
-        recalculate_one_bolt(df, df_feature, feature_ID)
+        recalculate_one_bolt(df, df_feature)
 
     return df_feature
 
