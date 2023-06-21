@@ -183,40 +183,6 @@ def camera_model(fx, fy, cx, cy, k1, k2, p1, p2, skew):
     dist = build_distortion_array(radial_distortion, tangential_distortion)
     return focal_length, principle_point, radial_distortion, tangential_distortion, mtx, dist
 
-
-# def undistort_points(df, mtx): # Unpack camera parameters k1, k2, p1, p2, k3 = var.k1, var.k2, var.p1, var.p2,
-# var.k3 ##k1, k2 and k3 are radial distortion coefficients, p1 and p2 are tangential distortion coefficients
-
-# fx, fy, cx, cy = var.fx, var.fy, var.cx, var.cy
-
-# # Convert distortion coefficients to numpy array
-# distortion_coeffs = np.array([k1, k2, p1, p2])
-
-# # Convert distorted points to homogeneous coordinates
-# distorted_points = df[['X', 'Y']].values.tolist()
-# distorted_points = np.array(distorted_points)
-
-#     distorted_points_homogeneous = np.column_stack((distorted_points, np.ones(len(distorted_points))))
-
-#     # Normalize the distorted points
-#     normalized_points = np.dot(np.linalg.inv(mtx), distorted_points_homogeneous.T)
-
-# # Apply distortion correction r_square = normalized_points[0] ** 2 + normalized_points[1] ** 2 radial_distortion =
-# 1 + distortion_coeffs[0] * r_square + distortion_coeffs[1] * r_square ** 2 tangential_distortion_x =
-# 2*distortion_coeffs[2]*normalized_points[0]*normalized_points[1] + distortion_coeffs[3]*(r_square + 2*(
-# normalized_points[0]**2)) tangential_distortion_y = distortion_coeffs[2]*(r_square + 2*(normalized_points[1]**2)) +
-# 2*distortion_coeffs[3]*normalized_points[0]*normalized_points[1]
-
-# # Compute undistorted points undistorted_points = normalized_points[:2]*radial_distortion + np.array([
-# tangential_distortion_x, tangential_distortion_y]) undistorted_points = np.vstack((undistorted_points, np.ones((1,
-# len(distorted_points)))))
-
-#     # Convert points back to image coordinates
-#     image_points = np.dot(mtx, undistorted_points)
-
-#     # Return undistorted image points
-#     return image_points[:2].T
-
 def undistort_points(df, newcameramtx):
     # Unpack camera parameters
     k1, k2, p1, p2, k3 = var.k1, var.k2, var.p1, var.p2, var.k3  # #k1, k2 and k3 are radial distortion coefficients,
@@ -420,7 +386,6 @@ def autoload_pts(fname, name, mtx, undistort):
     # df.insert(4, 'Undistort_X', u_coords[:, 0])
     # df.insert(5, 'Undistort_Y', u_coords[:, 1])
 
-    df['Name'] = df['Name'].map(lambda x: name)  ## replacing with user initials
 
     ## Process all the points
     for index, row in df.iterrows():
@@ -448,6 +413,8 @@ def autoload_pts(fname, name, mtx, undistort):
             elif not undistort:
                 df.at[index, 'R'] = np.sqrt((float(row[2]) - pmt_x) ** 2 + (float(row[3]) - pmt_y) ** 2)
                 df.at[index, 'theta'] = angle_to((float(row[2]), float(row[3])), (pmt_x, pmt_y))
+
+    df = duplicate_check(df)
     return df
 
 
@@ -458,18 +425,18 @@ def overlay_pts(fname):
     return df
 
 def get_current_feature(df, position):
-    df_feature = df[(df['X'] == position[0]) & (df['Y'] == position[1])]
-    
+    df_feature = df[(round(df['X']) == round(position[0])) & (round(df['Y']) == round(position[1]))]
+
     if len(df_feature.index) == 0:
         print("No feature found at this location!")
         raise
-    
+
     return df_feature
 
 def recalculate_one_bolt(df, df_feature):
-
+    
     feature_ID = df.at[df_feature.index[0], 'ID']
-
+    
     ## Get PMT ID associated to this bolt
     PMT_ID = feature_ID[:-2] + '00'
     df_pmt = df.loc[df['ID'] == PMT_ID]
@@ -477,7 +444,7 @@ def recalculate_one_bolt(df, df_feature):
     if len(df_pmt.index) == 0:
         print("No PMT found with ID " + PMT_ID)
         raise
-    
+
     elif len(df_pmt.index) > 1:
         print("Unexpected duplicate PMT_ID " + PMT_ID)
         raise
@@ -489,22 +456,22 @@ def recalculate_one_bolt(df, df_feature):
     bolt_r, theta = calc_bolt_properties(bolt_x, bolt_y, pmt_x, pmt_y)
 
     df.loc[df_feature.index, 'R'] = bolt_r
-    df.loc[df_feature.index, 'theta'] = theta    
-    
+    df.loc[df_feature.index, 'theta'] = theta
+
 def modify_label(df, position, id_new):
     df_feature = get_current_feature(df, position)
-    
+
     # Directly modify ID of feature in original dataframe
     df.loc[df_feature.index, 'ID'] = id_new
 
     # Update bolt_r and theta for this feature if it is a bolt
     if not str(id_new).endswith('00'):
-        recalculate_one_bolt(df, df_feature)    
-        
+        recalculate_one_bolt(df, df_feature)
+
     # Warning: no treatment of existing bolts if modified label is a PMT
     # But probably want to use a function that changes all the previous bolt labels, if any
     # (i.e from the new PMT auto-labeling function)
-    
+
     return df_feature
 
 def del_point(df, position):
@@ -538,35 +505,32 @@ def duplicate_check(df):
                 x = df_unique['X'].iloc[0]
                 y = df_unique['Y'].iloc[0]
 
-                print("Duplicate ID: ", dup_id, " at (", str(x), ", " + str(y) + ")")
-                print("Removing the duplicate: ", dup_id)
-
                 df.drop_duplicates(subset=df.columns[1], keep="first",
                                    inplace=True)  ## removing duplicate based on ID and keeping the first entry
                 df.reset_index(drop=True, inplace=True)  ## resetting indices after removing duplicates
 
+                sg.popup("Duplicate ID: ", dup_id, " at (", str(x), ", " + str(y) + ") will be removed.")
     return df
 
 
-def write_coords_to_csv(df, filename):
+def write_coords_to_file(df, filename):
     df = duplicate_check(df)
     df = df.sort_values(by=['ID'])
 
-    if filename.endswith('.txt'):
-        headers = ["Img", "ID", "X", "Y", "Name"]
-        df[headers].to_csv(filename, index=False, header=False, sep='\t')
-        print("Saved .txt annotations: ", filename)
-    elif filename.endswith('.csv'):
-        headers = ["Img", "ID", "X", "Y", "Undistort_X", "Undistort_Y", "Name", "R", "theta"]
-        df[headers].to_csv(filename, index=False, header=True)
-        print("Saved .csv annotations: ", filename)
+    # Write X/Y column with precision 
+    df['X'] = df['X'].map(lambda x: '{:.1f}'.format(x))
+    df['Y'] = df['Y'].map(lambda y: '{:.1f}'.format(y))
 
+    headers = ["Img", "ID", "X", "Y", "Name"]
+    df[headers].to_csv(filename, index=False, header=False, sep='\t')
+    print("Saved .txt annotations: ", filename)
 
 def angle_to(p1, p2, rotation=270, clockwise=False):
     angle = math.degrees(math.atan2(p2[1] - p1[1], p2[0] - p1[0])) - rotation
     if not clockwise:
         angle = -angle
     return angle % 360
+
 
 def get_closest_pmt(df, x, y):
     df_pmts = df[df['ID'].apply(lambda feature_id: float(feature_id[-2:]) == 0)]
@@ -581,8 +545,8 @@ def calc_bolt_properties(bolt_x, bolt_y, pmt_x, pmt_y):
     bolt_to_pmt = (bolt_x - pmt_x, bolt_y - pmt_y)
     bolt_r = np.sqrt(bolt_to_pmt[0] ** 2 + bolt_to_pmt[1] ** 2)
     theta = angle_to((bolt_x, bolt_y), (pmt_x, pmt_y))
-    
-    return bolt_r, theta    
+
+    return bolt_r, theta
 
 def make_bolt(df, bolt_x, bolt_y, name):
     ## Find which PMT the bolt is closest to
@@ -670,7 +634,7 @@ def make_pmt(df, pmt_id, pmt_x, pmt_y, name):
     return df
 
 def recalculate_all_bolts(df, New_ID, pmt_x, pmt_y):
-    
+
     df_bolts = df[df['ID'].apply(lambda id: (id[:5] == New_ID[:5]) & (float(id[-2:]) > 0))]
 
     # Modify R and theta in df_bolts
@@ -683,7 +647,7 @@ def check_existing_id(df, new_id):
     if new_id in df['ID'].values:
         print ("ID already exists:", new_id)
         raise Exception("ID already exists! Please check existing bolt labels or choose a different PMT ID.")
-    
+
 def move_feature(df, start_pt, end_pt, name):
 
     df_feature = get_current_feature(df, start_pt)
@@ -692,7 +656,7 @@ def move_feature(df, start_pt, end_pt, name):
     df.loc[df_feature.index, 'X'] = end_pt[0]
     df.loc[df_feature.index, 'Y'] = end_pt[1]
     df.loc[df_feature.index, 'Name'] = name
-
+    
     feature_ID = df_feature['ID'].iloc[0]
     # print("Feature being moved is ", feature_ID)
 
@@ -716,12 +680,8 @@ def plot_labels(graph, df, undistort):
         pmt_id = str(row[1])[:5]
         bolt_id = str(row[1])[-2:]
 
-        if undistort:
-            draw_x = row[4]
-            draw_y = row[5]
-        if not undistort:
-            draw_x = row[2]
-            draw_y = row[3]
+        draw_x = row[2]
+        draw_y = row[3]
         color = 'red' if bolt_id == '00' else 'yellow'
         text = pmt_id if bolt_id == '00' else bolt_id
 
@@ -740,18 +700,6 @@ def get_marker_center(graph, fig):
     curr_x = (current_coords[0][0] + current_coords[1][0]) / 2
     curr_y = (current_coords[0][1] + current_coords[1][1]) / 2
     return curr_x, curr_y
-
-
-def get_pmt(df, curr_x, curr_y):
-    df_pmts = df[df['ID'].apply(lambda id: (id[-2:] == '00'))]
-    for index, row in df_pmts.iterrows():
-        pmt_x = float(row[2])
-        pmt_y = float(row[3])
-        if round(pmt_x,1) == curr_x and round(pmt_y,1) == curr_y:
-            # print PMT ID for this point
-            print("PMT ID is ", row[1])
-            return row[1]
-
 
 def autolabel(df, new_ref, label):
 
@@ -778,34 +726,49 @@ def autolabel(df, new_ref, label):
 
     ## organize the PMTs in the same row such in order of increasing x-coordinate
     row.sort(key=lambda id: df[df['ID'] == id]['X'].iloc[0])
-    print("Sorted row", row)
 
     ## organize the PMTs in the same column such in order of decreasing y-coordinate
     column.sort(key=lambda id: df[df['ID'] == id]['Y'].iloc[0], reverse=True)
-    print("Sorted column before removing any PMTs", column)
 
-    row_label = label # used as a buffer row label to assign labels to the PMTs in the same row as the reference PMT
-    col_label = label # used as a buffer column label to assign labels to the PMTs in the same column as the reference PMT
+    row_label = int(label) # used as a buffer row label to assign labels to the PMTs in the same row as the reference PMT
+    col_label = int(label) # used as a buffer column label to assign labels to the PMTs in the same column as the reference PMT
 
-    # assign labels to the PMTs in the same row as the reference PMT, increasing by 51 each element
+    # make new list of PMTs in the same row as the reference PMT with x coordinate greater than the reference PMT
+    new_row = []
     for i in row:
-        row_label += 51
-        df.at[df[df['ID'] == i].index[0], 'Labels'] = row_label
-
+        if df[df['ID'] == i]['X'].iloc[0] > df[df['ID'] == new_ref]['X'].iloc[0]:
+            new_row.append(i)
 
     # make new list of PMTs in the same column as the reference PMT with y coordinate less than the reference PMT
-    new_col = []
+    new_column = []
     for i in column:
         if df[df['ID'] == i]['Y'].iloc[0] < df[df['ID'] == new_ref]['Y'].iloc[0]:
-            new_col.append(i)
+            new_column.append(i)
+
+    # assign labels to the PMTs in the same row as the reference PMT, increasing by 51 each element
+    for i in new_row:
+        row_label += 51
+        # if no label, assign a label
+        if df[df['ID'] == i]['Labels'].iloc[0] == row_label:
+            continue
+        else:
+            df.at[df[df['ID'] == i].index[0], 'Labels'] = row_label
+            print("Assigned label ", row_label, " to PMT ", i)
+
 
     # assign labels to the PMTs in the same column as the reference PMT, increasing by 1 each element
-    for i in new_col:
+    for i in new_column:
         col_label += 1
-        df.at[df[df['ID'] == i].index[0], 'Labels'] = col_label
+        # if no label exists for this PMT, assign a label
+        if df[df['ID'] == i]['Labels'].iloc[0] == col_label:
+            continue
+        else:
+            df.at[df[df['ID'] == i].index[0], 'Labels'] = col_label
+            print("Assigned label ", col_label, " to PMT ", i)
 
-    print("Sorted column", new_col)
+    print("Sorted new row", new_row)
+    print("Sorted new column", new_column)
 
     # print("New dataframe with labels", df.to_string())
 
-    return df, new_ref, row, new_col
+    return df, new_ref, row, column
