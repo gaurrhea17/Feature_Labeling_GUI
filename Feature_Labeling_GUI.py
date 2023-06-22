@@ -5,7 +5,12 @@ Created on Wed Mar 15 14:24:03 2023
 @author: gaurr
 """
 
+
+
+#%%
+
 ## Importing necessary packages
+import sys
 
 import numpy as np
 import glob
@@ -23,8 +28,7 @@ import geopandas as gpd
 import Feature_Labeling_Functions as func
 import Feature_Labeling_Variables as var
 
-import sys
-sys.path.append(r'C:\Users\gaurr\OneDrive - TRIUMF\Super-K\Reconstruction\PhotogrammetryAnalysis-master')
+#sys.path.append(r'C:\Users\gaurr\OneDrive - TRIUMF\Super-K\Reconstruction\PhotogrammetryAnalysis-master')
 # import SK_ring-relabelling-secondattempt as recon
 
 
@@ -96,7 +100,7 @@ post_process_col= [
 
 ## Main function
 def main():
-    
+
     # ------ Full Window Layout
     layout= [
         [menubar, sg.Column(file_list_col), sg.VSeperator(), sg.Column(image_viewer_col_2), sg.VSeperator(), sg.Column(post_process_col),
@@ -277,8 +281,9 @@ def main():
                         # look for curr_x and curr_y in the dataframe
                         first_pmt = func.get_pmt(df, curr_x, curr_y)
 
-                        # insert column after df['ID'] column with name 'Labels' in the dataframe
-                        df.insert(2, 'Labels', 'None')
+                        # insert column with name 'Labels' at the end of the dataframe
+                        df.insert(len(df.columns), 'Labels', np.nan)
+
 
                         # get the index of the first pmt and get user input for this PMT's label. Put input into df['Labels'] column at index
                         index = df[df['ID'] == first_pmt].index[0]
@@ -340,6 +345,14 @@ def main():
 
                         # show the plot
                         plt.show()
+
+                        # replace 'ID' column values with 'Labels' column values
+                        df['ID'] = df['Labels']
+
+                        # delete 'Labels' column
+                        df = df.drop(columns=['Labels'])
+
+                        # print("Final dataframe with all labels. ", df.to_string())
 
                         window["-INFO-"].update(value=f'Auto labeled PMTs')
 
@@ -545,35 +558,5 @@ def main():
     
 main()
 
-
-# %%
-
-import numpy as np
-
-# load in data from .txt file "530.txt"
-value_file = np.loadtxt("C:/Users\gaurr\OneDrive - TRIUMF\Super-K\Feature Detection & Labelling\TB3\BarrelSurveyRings\points/530.txt", usecols=[2,3])
-
-# plot the X and Y coordinates from the third and fourth columns of the .txt file
-import matplotlib.pyplot as plt
-
-# use the second column to get the text labels for the associated points
-labels = np.loadtxt("C:/Users\gaurr\OneDrive - TRIUMF\Super-K\Feature Detection & Labelling\TB3\BarrelSurveyRings\points/530.txt", usecols=[1], dtype=str)
-
-# find indices the last characters of the labels elements are '00'
-indices = [i for i, x in enumerate(labels) if x.endswith("00")]
-
-# keep only 'indices' in the labels and value_file arrays
-labels = labels[indices]
-value_file = value_file[indices]
-
-plt.scatter(value_file[:,0], 2750-value_file[:,1], s = 1)
-
-# plot the text labels on the same plot but only using the fourth and fifth characters of the label
-for i, txt in enumerate(labels):
-    plt.annotate(labels[i][3:5], (value_file[i,0], 2750-value_file[i,1]))
-
-
-# show the plot
-
-plt.show()
+#%%
 
