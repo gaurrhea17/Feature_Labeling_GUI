@@ -5,10 +5,6 @@ Created on Wed Mar 15 14:24:03 2023
 @author: gaurr
 """
 
-
-
-#%%
-
 ## Importing necessary packages
 import sys
 
@@ -23,21 +19,16 @@ import PySimpleGUI as sg
 import matplotlib
 import matplotlib.pyplot as plt
 import cv2 as cv
-import geopandas as gpd
 
 import Feature_Labeling_Functions as func
 import Feature_Labeling_Variables as var
-
-#sys.path.append(r'C:\Users\gaurr\OneDrive - TRIUMF\Super-K\Reconstruction\PhotogrammetryAnalysis-master')
-# import SK_ring-relabelling-secondattempt as recon
-
 
 
 # %% Defining window objects and layout
 
 # sg.theme_previewer() ## Use to see all the colour themes available
-sg.theme('LightPurple') ## setting window colour scheme
-sg.set_options(dpi_awareness=True)
+sg.theme('LightBlue') ## setting window colour scheme
+sg.set_options(dpi_awareness=True) ## setting window options
 
 ## Top menubar options
 menu_butts = [['File', ['New', 'Open', 'Save', 'Exit', ]], ['Edit', ['Copy', '&Undo point', 'Resize Image', 'Change Canvas Size'], ],  ['Help', 'About...'], ]
@@ -83,7 +74,6 @@ image_viewer_col_2 = [
 post_process_col= [
     [sg.Column(mov_col)],
     [sg.Button("Save Annotations", size = (15,1), key="-SAVE-")],
-    [sg.Button("Undistort", size = (15,1), key="-UNDISTORT-")],
     [sg.Button("Plot Labels", size = (15,1), key="-PLOT_LABEL-"), sg.Button("Remove Labels", size = (18,1), key="-ERASE_LABEL-")],
     [sg.Button("Write CSV", size = (15,1), key="-CSV-")],
     [sg.Button("Reconstruct", size=(15,1), key="-RECON-")],
@@ -136,11 +126,6 @@ def main():
         if event == "Exit" or event == sg.WIN_CLOSED: ## end loop if user clicks "Exit" or closes window
             break;
         
-        if event == "-UNDISTORT-":
-            undistort = True
-        else:
-            undistort = False
-        
         # Folder name filled in, we'll now make a list of files in the folder
         if event == "-FOLDER-": ## checking if the user has chosen a folder
             fnames = func.parse_folder(window, values)
@@ -156,7 +141,7 @@ def main():
                     # graph.delete_figure(ids) ## delete the figure on the canvas if displaying a new one
                     graph.erase()
                     
-                image, pil_image, filename, ids, newcameramtx = func.disp_image(window, values, fnames, location=0, undistort=undistort)
+                image, pil_image, filename, ids = func.disp_image(window, values, fnames, location=0)
                 first_pmt = None ## to allow autolabeling again
                 window.refresh()
                 window["-COL-"].contents_changed()
@@ -167,13 +152,13 @@ def main():
                     pts_file = os.path.basename(filename).split('.')[0]
                     pts_fname = os.path.join(pts_dir, pts_file) + ".txt" 
     
-                    df = func.autoload_pts(pts_fname, name, var.mtx, undistort)
-                    print("Autoloaded the points.")
+                    df = func.autoload_pts(pts_fname, name, var.mtx)
+                    print("Autoloaded the points. The new dataframe: \n", df)
                     Img_ID = df['Img'].iloc[0]
-                    func.draw_pts(graph, df, undistort)
+                    func.draw_pts(graph, df)
                     print("Drawing the points")
                     func.erase_labels(graph, labels)             
-                    labels = func.plot_labels(graph, df, undistort)
+                    labels = func.plot_labels(graph, df)
                     print("Plotting the labels.")
                 except Exception as e:
                     print(e)
@@ -189,7 +174,7 @@ def main():
             if event == "-PREV-":
                 location=-1
 
-            image, pil_image, filename, ids, newcameramtx = func.disp_image(window, values, fnames, location=location, undistort=undistort)
+            image, pil_image, filename, ids = func.disp_image(window, values, fnames, location=location)
             first_pmt = None ##to allow autolabeling again
             window.refresh()
             window["-COL-"].contents_changed()
@@ -197,11 +182,11 @@ def main():
             try:
                 pts_file = os.path.basename(filename).split('.')[0]
                 pts_fname = os.path.join(pts_dir, pts_file) + ".txt"             
-                df = func.autoload_pts(pts_fname, name, newcameramtx, undistort)
+                df = func.autoload_pts(pts_fname, name)
                 Img_ID = df['Img'].iloc[0]
-                func.draw_pts(graph, df, undistort)
+                func.draw_pts(graph, df)
                 func.erase_labels(graph, labels)                
-                labels = func.plot_labels(graph, df, undistort)
+                labels = func.plot_labels(graph, df)
             except Exception as e:
                 print(e)
                 print("No associated points file found.")
@@ -266,165 +251,7 @@ def main():
                     window["-INFO-"].update(value=f'Failed point at ({x}, {y})')
 
     ## ================= AUTO LABELING ===============================
-            ## User clicks on a PMT and program gets the PMTs coordinates from the graph.
-            elif values["-LABELING-"]:
 
-                if first_pmt == None:
-                    sg.popup_ok(("You selected your first PMT."))
-
-                    try:
-                        # get figure at location
-                        fig = graph.get_figures_at_location(values['-GRAPH-'])[1]
-                        curr_x, curr_y = func.get_marker_center(graph, fig)
-                        print("Coordinates of selected PMT: ", curr_x, curr_y)
-
-                        # look for curr_x and curr_y in the dataframe
-                        first_pmt = func.get_pmt(df, curr_x, curr_y)
-
-                        # insert column with name 'Labels' at the end of the dataframe
-                        df.insert(len(df.columns), 'Labels', np.nan)
-
-
-                        # get the index of the first pmt and get user input for this PMT's label. Put input into df['Labels'] column at index
-                        index = df[df['ID'] == first_pmt].index[0]
-                        print("Index of selected PMT in dataframe: ", index)
-                        label = int(sg.popup_get_text('Please enter label', title="Adding Label"))
-                        df.at[index, 'Labels'] = label
-
-                        # finds PMT in dataframe and the other PMTs in the same row and column. Labels the row and column PMTs.
-                        df, new_ref, row, column = func.autolabel(df, first_pmt, label)
-
-                        print("Row and column ", row, column)
-                        col_len = len(column)
-
-                        count = 0
-                        while count < col_len:
-
-                            # look for the next PMT in the 'column'
-                            index = df[df['ID'] == column[0]].index[0]
-
-                            # get the ID of the PMT at the index and its label
-                            new_ref = df['ID'].iloc[index]
-                            print("New reference PMT: ", new_ref)
-                            new_label = df['Labels'].iloc[index]
-                            print("New reference PMT label: ", new_label)
-
-                            df, new_ref, row, column = func.autolabel(df, new_ref, new_label)
-                            print("Row and column ", row, column)
-                            count +=1
-                            print("Count: ", count)
-
-
-                        print("Final dataframe with all labels. ", df.to_string())
-
-                        # remove '-LABELING-' button selection
-                        window["-LABELING-"].update(value=False)
-
-                        ## get the number of PMTs with labels that are not None
-                        num_labeled = len(df[df['Labels'] != 'None'])
-                        print("Number of labeled PMTs: ", num_labeled)
-
-                        # create new plot using matplotlib with only PMTs using their coordinates from the dataframe and plot the associated labels as text
-                        # get indicies of the PMTs, 'ID' column will end with '00'
-                        pmt_indicies = df[df['ID'].str.endswith('00')].index
-
-                        # get the x and y coordinates of the PMTs
-                        x = np.array(df['X'].iloc[pmt_indicies])
-                        y = np.array(df['Y'].iloc[pmt_indicies])
-
-                        # get the labels of the PMTs
-                        pmt_labels = np.array(df['Labels'].iloc[pmt_indicies])
-                        print("PMT Labels", pmt_labels)
-
-                        # create a new figure
-                        plt.scatter(x, y, s=1)
-
-                        # plot the labels from the pmt_labels array on the same plot as text
-                        for i, txt in enumerate(pmt_labels):
-                            plt.annotate(pmt_labels[i], (x[i], y[i]))
-
-                        # show the plot
-                        plt.show()
-
-                        # replace 'ID' column values with 'Labels' column values
-                        df['ID'] = df['Labels']
-
-                        # delete 'Labels' column
-                        df = df.drop(columns=['Labels'])
-
-                        # print("Final dataframe with all labels. ", df.to_string())
-
-                        window["-INFO-"].update(value=f'Auto labeled PMTs')
-
-                    except Exception as e:
-                        print(e)
-                        window["-INFO-"].update(value=f'Failed to auto label PMTs')
-
-
-                        # ## trying geopandas for creating a grid
-                        # parse_data = [[item['Img'], item['ID'], item['SK'], item['X'], item['Y'], item['R'], item['theta'], item['Name']] for item in coord_dict]
-                        # df = pd.DataFrame(coord_dict=parse_data, columns=['Img', 'ID', 'SK', 'X', 'Y', 'R', 'theta', 'Name'])
-                        # pmt_plot = gdf.GeoDataFrame(df, geometry=geopandas.points_from_xy(df.X, df.Y))
-                        # pmt_plot.head()
-
-
-                        ## place points inside a pseudo regular grid
-                    #
-                    #     nodesx = 100
-                    #     sizex=20
-                    #     sizey=20
-                    #     firstx = min(coord_dict["X"])-20
-                    #     firsty = min(coord_dict["Y"])-20
-                    #
-                    #     new, xt, yt = [], [], []
-                    #     for i in point_coords:
-                    #         xo = int((i[0]-firstx)/sizex) ## gives x grid cell size
-                    #         yo = int((i[1]-firsty)/sizey)
-                    #         new.append(nodesx*yo + xo)
-                    #         xt.append(i[0])
-                    #         yt.append(i[1])
-                    #
-                    #     sort_points = [x for (y,x) in sorted(zip(new, point_coords))]
-                    #
-                    #     ## index for where we have our identified PMT in sorted list
-                    #     pmt_idx = np.where(np.array(point_coords) == first_pmt)[0][0]
-                    #     print("The coordinates are apparently ", xt[pmt_idx], yt[pmt_idx])
-                    #     print("Index where we labeled our PMT", pmt_idx)
-                    #
-                    #     # label_list = [0.0]*len(new)
-                    #     # label_list[pmt_idx] = first_label
-                    #
-                    #     # for i, e in reversed(list(enumerate(label_list[0:pmt_idx]))):
-                    #     #     if new[i]
-                    #
-                    #
-                    #     plt.scatter(xt, yt)
-                    #
-                    #
-                    #
-                    #     for i in range(len(sort_points)):
-                    #         plt.text(sort_points[i][0], sort_points[i][1], str(i))
-                    #
-                    #     plt.show()
-                    #
-                    #     ## meshgrid method
-                    #     xv, yv = np.meshgrid(x,y,sparse=True)
-                    #     # pmt_idx = np.argwhere((xv == first_pmt[0]) & (yv == first_pmt[1]))
-                    #     # print("Grid index of identified point, ", pmt_idx)
-                    #     fig = plt.figure()
-                    #     ax = fig.add_subplot(111)
-                    #     ax.plot(xv[0,:], yv[:,0], marker='o', color='k', linestyle='none')
-                    #     for xy in zip(xv[0,:], yv[:,0]):
-                    #         ax.annotate('(%s, %s)' % xy, xy=xy, textcoords='data')
-                    #     ax.grid
-                    #     # plt.plot(np.diag(xv), np.diag(yv), marker='o', color='k', linestyle='none')
-                    #     plt.show()
-                    #
-                    # except Exception as e:
-                    #     print(e)
-                    #     print("Autolabeling did not work. Please try selecting a PMT again.")
-                    #
-                    #
         elif event.endswith('+UP'):
             
             made_point = False
@@ -443,11 +270,13 @@ def main():
                     if len(figures)>1:
                         graph.delete_figure(fig)
                         df_erased_feature = func.del_point(df, start_pt)
+
                         window["-INFO-"].update(value=f"Erased point {df_erased_feature['ID'].iloc[0]}")
 
                 except Exception as e:
                     print(e)
-                    
+
+
             elif values['-MODIFY-']:
                 try:
                     id_new = None
@@ -461,9 +290,79 @@ def main():
                 except Exception as e:
                     print(e)
 
-            func.erase_labels(graph, labels)                
-            labels = func.plot_labels(graph, df, undistort)
-                
+            ## User clicks on a PMT and program gets the PMTs coordinates from the graph.
+            elif values["-LABELING-"]:
+
+                if first_pmt == None:
+                    # sg.popup_ok(("You selected your first PMT."))
+
+                    try:
+                        # get figure at location
+                        fig = graph.get_figures_at_location(values['-GRAPH-'])[1]
+                        curr_x, curr_y = func.get_marker_center(graph, fig)
+                        print("Coordinates of selected PMT: ", curr_x, curr_y)
+
+                        # look for curr_x and curr_y in the dataframe
+                        curr_pos = (curr_x, curr_y)
+                        df_feature = func.get_current_feature(df, curr_pos)
+                        first_pmt = df_feature['ID'].iloc[0]
+
+                        # insert column with name 'Labels' at the end of the dataframe
+                        df.insert(len(df.columns), 'Labels', None)
+
+                        # get the index of the first pmt and get user input for this PMT's label. Put input into df['Labels'] column at index
+                        index = df[df['ID'] == first_pmt].index[0]
+                        label = int(sg.popup_get_text('Please enter label', title="Adding Label"))
+                        df.at[index, 'Labels'] = label
+
+                        # finds PMT in dataframe and the other PMTs in the same row and column. Labels the row and column PMTs.
+                        df, new_ref, row1, column1 = func.autolabel(df, first_pmt, label)
+
+                        col_len = len(column1)
+                        row_len = len(row1)
+
+                        count = 0
+                        while count < col_len or count < row_len:
+                            if count < col_len:
+                                new_ref, new_label = func.get_next_ref(df, count, column1)
+
+                                # autolabeling PMTs in the same row as new_ref
+                                df, new_ref, row, column = func.autolabel(df, new_ref, new_label)
+
+                            if count < row_len:
+                                new_ref2, new_label2 = func.get_next_ref(df, count, row1)
+
+                                # autolabeling PMTs in the same column as new_ref2
+                                df, new_ref2, row, column = func.autolabel(df, new_ref2, new_label2)
+
+                            count += 1
+
+                        print("Final dataframe with all labels. ", df.to_string())
+
+                        func.autolabel_plot(df)
+
+                        # final dataframe
+                        df = func.finalize_df(df)
+
+                        window["-INFO-"].update(value=f'Auto labeled PMTs')
+
+                        first_pmt = None  ## to allow autolabeling again
+
+                        window.refresh()
+                        window["-COL-"].contents_changed()
+
+                        # unselect 'Autolabel' radio button allow autolabeling again
+                        window['-LABELING-'].update(value=False, visible=True)
+
+
+                    except Exception as e:
+                        print(e)
+                        print("Auto labeling failed. Please select 'Autolabel' again.")
+                        window["-INFO-"].update(value=f'Failed to auto label PMTs')
+
+            func.erase_labels(graph, labels)
+            labels = func.plot_labels(graph, df)
+
             dragging = False
 
         elif event.endswith('+MOTION+'):
@@ -482,7 +381,7 @@ def main():
             func.draw_pts(graph, df)
             print("Drawing points")
             func.erase_labels(graph, labels)                
-            labels = func.plot_labels(graph, df, undistort)
+            labels = func.plot_labels(graph, df)
             print("Plotting labels")
 
 ## ======================== Menubar functions =======================================        
@@ -498,33 +397,33 @@ def main():
             
         elif event == '-PLOT_LABEL-':
             func.erase_labels(graph, labels)                
-            labels = func.plot_labels(graph, df, undistort)
+            labels = func.plot_labels(graph, df)
             
         elif event == '-ERASE_LABEL-':
             func.erase_labels(graph, labels)
         
         elif event == '-CSV-':
             folder = os.path.join(os.path.dirname(values["-FOLDER-"]),'Annotation_Coordinates')
+
+            # Make folder if it doesn't exist
+            if not os.path.exists(folder):
+                os.makedirs(folder)
+
             output_filepath_txt = os.path.join(folder, os.path.basename(os.path.splitext(filename)[0])+".txt")
-            output_filepath_csv = os.path.join(folder, os.path.basename(os.path.splitext(filename)[0])+".csv")
             
             try:
                 
-                func.write_coords_to_csv(df, output_filepath_txt)
-                func.write_coords_to_csv(df, output_filepath_csv)
+                func.write_coords_to_file(df, output_filepath_txt)
                 
             except Exception as e:
                 print(e)
                 sg.popup_ok("Could not save. Check terminal messages.")
-            
-        # elif event == 'Shift R':
             
         # This doesn't seem to do anything yet
         elif event == '&Undo point':
             
             try:
                 graph.delete_figure(fig)
-
                 # Delete the last row of dataframe
                 df = df[:-1]
                 
@@ -547,7 +446,7 @@ def main():
             data = func.resize(window, im_array, scale)
             func.change_canvas_size(window, graph, scale)
             graph.draw_image(data=data, location=(0,var.height))
-            func.draw_pts(graph, df, undistort, scale=scale)
+            func.draw_pts(graph, df, scale=scale)
             
                 
             # except:

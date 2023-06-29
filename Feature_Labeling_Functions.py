@@ -181,76 +181,9 @@ def camera_model(fx, fy, cx, cy, k1, k2, p1, p2, skew):
     dist = build_distortion_array(radial_distortion, tangential_distortion)
     return focal_length, principle_point, radial_distortion, tangential_distortion, mtx, dist
 
-def undistort_points(df, newcameramtx):
-    # Unpack camera parameters
-    k1, k2, p1, p2, k3 = var.k1, var.k2, var.p1, var.p2, var.k3  # #k1, k2 and k3 are radial distortion coefficients,
-    # p1 and p2 are tangential distortion coefficients
-
-    fx, fy, cx, cy = var.fx, var.fy, var.cx, var.cy
-
-    # Convert distorted points to homogeneous coordinates
-    distorted_points = df[['X', 'Y']].values.tolist()
-    distorted_points = np.array(distorted_points)
-
-    dst = cv.undistortPoints(distorted_points, newcameramtx, var.dist)
-
-    return dst
-
-
-def distort_points(undistorted_points, distortion_coeffs, camera_params):
-    # Convert undistorted points to homogeneous coordinates
-    undistorted_points_homogeneous = np.vstack((undistorted_points, np.ones((1, len(undistorted_points)))))
-
-    # Perform projection using camera matrix
-    distorted_points_homogeneous = np.dot(camera_params, undistorted_points_homogeneous)
-
-    # Convert distorted points to non-homogeneous coordinates
-    distorted_points = distorted_points_homogeneous[:2] / distorted_points_homogeneous[2]
-
-    # Apply radial and tangential distortion
-    r_square = distorted_points[0] ** 2 + distorted_points[1] ** 2
-    radial_distortion = 1 + distortion_coeffs[0] * r_square + distortion_coeffs[1] * r_square ** 2
-    tangential_distortion_x = 2 * distortion_coeffs[2] * distorted_points[0] * distorted_points[1] + distortion_coeffs[
-        3] * (r_square + 2 * distorted_points[0] ** 2)
-    tangential_distortion_y = distortion_coeffs[2] * (r_square + 2 * distorted_points[1] ** 2) + 2 * distortion_coeffs[
-        3] * distorted_points[0] * distorted_points[1]
-
-    distorted_points = distorted_points * radial_distortion + np.array(
-        [tangential_distortion_x, tangential_distortion_y])
-
-    return distorted_points
-
-
-def undistort_img(img_path, mtx, dist):  ## uses bilinear interpolation
-    '''This function is used to undistort the image to display in the GUI.'''
-
-    img = cv.imread(img_path)
-    h, w = img.shape[:2]
-
-    '''Free scaling parameter. If it is -1 or absent, the function performs the default scaling. 
-    Otherwise, the parameter should be between 0 and 1. alpha=0 means that the rectified images are 
-    zoomed and shifted so that only valid pixels are visible (no black areas after rectification). 
-    alpha=1 means that the rectified image is decimated and shifted so that all the pixels from the 
-    original images from the cameras are retained in the rectified images (no source image pixels are lost). 
-    Any intermediate value yields an intermediate result between those two extreme cases.'''
-
-    newcameramtx, roi = cv.getOptimalNewCameraMatrix(mtx, dist, (w, h), -1, (w, h))  ## alpha = 1
-
-    ## undistorting
-    dst = cv.undistort(img, mtx, dist, None, newcameramtx)  # can include argument, newcameramtx to this function
-
-    ## can crop the image (eliminates black areas after rectification, especially when alpha=1)
-    x, y, w, h = roi
-    # dst = dst[y:y+h, x:x+w] ## array of uint8
-
-    # Convert the undistorted image to the correct type bytes
-    undistorted_img = cv.imencode('.png', dst)[1].tobytes()
-
-    return undistorted_img, newcameramtx
-
 
 ## User selected an image to display
-def disp_image(window, values, fnames, location, undistort):
+def disp_image(window, values, fnames, location):
     """ This function is called when the user selects an image they wish to display.
     This can be either when an image is selected from the listbox or the "Next" 
     or "Previous" buttons are selected. 
@@ -282,23 +215,8 @@ def disp_image(window, values, fnames, location, undistort):
     ## converting image type to array and then array to data
     im = Image.open(fname)
 
-    if undistort:
-        ## Undistorting the image first
-        focal_length, principle_point, radial_distortion, tangential_distortion, mtx, dist = camera_model(var.fx,
-                                                                                                          var.fy,
-                                                                                                          var.cx,
-                                                                                                          var.cy,
-                                                                                                          var.k1,
-                                                                                                          var.k2,
-                                                                                                          var.p1,
-                                                                                                          var.p2,
-                                                                                                          var.skew)
-        data, newcameramtx = undistort_img(fname, mtx, dist)
-
-    elif not undistort:
-        ## Converting image to array to data -- for display of distorted images
-        data = array_to_data(im, fname)
-        newcameramtx = None
+    ## Converting image to array to data -- for display of distorted images
+    data = array_to_data(im, fname)
 
     ids = window["-GRAPH-"].draw_image(data=data, location=(0, var.height))
 
@@ -306,7 +224,7 @@ def disp_image(window, values, fnames, location, undistort):
         im_bytes = f.read()
     pil_image = Image.open(io.BytesIO(im_bytes))
 
-    return im, pil_image, fname, ids, newcameramtx
+    return im, pil_image, fname, ids
 
 
 def copy(window):
@@ -341,23 +259,25 @@ def save_element_as_file(element, fname):
         print(e)
 
 
-def draw_pts(graph, df, undistort, scale=1):
+def draw_pts(graph, df, scale=1):
     for index, row in df.iterrows():
 
-        if undistort:
-            draw_coords = (float(row[4]) * scale, float(row[5]) * scale)
-        elif not undistort:
-            draw_coords = (float(row[2]) * scale, float(row[3]) * scale)
+        draw_coords = (float(row[2]) * scale, float(row[3]) * scale)
         color = 'yellow'
         size = 6
         if str(row[1]).endswith('00'):  # PMT
             color = 'red'
             size = 8
 
+        print("Drawing point at:", draw_coords)
+
+        # find ID in df with coordinates draw_coords and print the ID
+        print(df.loc[(df['X'] == draw_coords[0]) & (df['Y'] == draw_coords[1])]['ID'])
+
         graph.draw_point(draw_coords, color=color, size=size)
 
 
-def autoload_pts(fname, name, mtx, undistort):
+def autoload_pts(fname, name, mtx):
     print("Loading points file:", fname)
 
     ## Read space delimited point file into dataframe
@@ -373,16 +293,6 @@ def autoload_pts(fname, name, mtx, undistort):
     ## Invert Y coordinate from the FeatureReco convention
     if var.invert_y:
         df['Y'] = df['Y'].map(lambda Y: var.height - Y)
-
-    ## Undistort the points and add to dataframe
-    # u_coords = undistort_points(df, mtx)
-    # print(u_coords)
-    # print("Undistortion worked. Shape of u_coords is ", u_coords.shape)
-    #
-    # # insert x coordinates from u_coords into dataframe at column 4
-    # # insert y coordinates from u_coords into dataframe at column 5
-    # df.insert(4, 'Undistort_X', u_coords[:, 0])
-    # df.insert(5, 'Undistort_Y', u_coords[:, 1])
 
 
     ## Process all the points
@@ -405,12 +315,8 @@ def autoload_pts(fname, name, mtx, undistort):
             pmt_x = float(df_pmt['X'].iloc[0])
             pmt_y = float(df_pmt['Y'].iloc[0])
 
-            if undistort:
-                df.at[index, 'R'] = np.sqrt((float(row[4]) - pmt_x) ** 2 + (float(row[5]) - pmt_y) ** 2)
-                df.at[index, 'theta'] = angle_to((float(row[4]), float(row[5])), (pmt_x, pmt_y))
-            elif not undistort:
-                df.at[index, 'R'] = np.sqrt((float(row[2]) - pmt_x) ** 2 + (float(row[3]) - pmt_y) ** 2)
-                df.at[index, 'theta'] = angle_to((float(row[2]), float(row[3])), (pmt_x, pmt_y))
+            df.at[index, 'R'] = np.sqrt((float(row[2]) - pmt_x) ** 2 + (float(row[3]) - pmt_y) ** 2)
+            df.at[index, 'theta'] = angle_to((float(row[2]), float(row[3])), (pmt_x, pmt_y))
 
     df = duplicate_check(df)
     return df
@@ -423,6 +329,7 @@ def overlay_pts(fname):
     return df
 
 def get_current_feature(df, position):
+    # finds clicked point in dataframe and matches ID to feature
     df_feature = df[(round(df['X']) == round(position[0])) & (round(df['Y']) == round(position[1]))]
 
     if len(df_feature.index) == 0:
@@ -476,6 +383,8 @@ def del_point(df, position):
     df_feature = get_current_feature(df, position)
 
     df.drop(df_feature.index, inplace=True)
+
+    df.reset_index(drop=True, inplace=True)  ## resetting indices after deleting point
 
     return df_feature
 
@@ -632,8 +541,10 @@ def make_pmt(df, pmt_id, pmt_x, pmt_y, name):
     return df
 
 def recalculate_all_bolts(df, New_ID, pmt_x, pmt_y):
+    print("Gone to recalculate_all_bolts function. New_ID[:-2] is ", New_ID[:-2])
 
-    df_bolts = df[df['ID'].apply(lambda id: (id[:5] == New_ID[:5]) & (float(id[-2:]) > 0))]
+    # find all entries where df['ID'] starts with New_ID[:-2] and ends not with '00' and print df['ID'] inside lambda function
+    df_bolts = df[df['ID'].apply(lambda feature_id: (feature_id != None) and (feature_id[:-2] == New_ID[:-2]) and (feature_id[-2:] != '00'))]
 
     # Modify R and theta in df_bolts
     for index, row in df_bolts.iterrows():
@@ -650,40 +561,47 @@ def move_feature(df, start_pt, end_pt, name):
 
     df_feature = get_current_feature(df, start_pt)
 
-    # Modify X and Y in df_feature and reflect in original df
+    # Modify X and Y in df_feature and reflect in original df, new coordinates of moved feature are end_pt
+    # Modify X and Y in df_feature and reflect in original df, new coordinates of moved feature are end_pt
     df.loc[df_feature.index, 'X'] = end_pt[0]
+    print("end_pt[0] is ", end_pt[0])
     df.loc[df_feature.index, 'Y'] = end_pt[1]
+    print("end_pt[1] is ", end_pt[1])
     df.loc[df_feature.index, 'Name'] = name
     
     feature_ID = df_feature['ID'].iloc[0]
-    # print("Feature being moved is ", feature_ID)
+    print("Feature being moved is ", feature_ID)
 
     # If the feature being moved is a PMT
     if str(feature_ID).endswith('00'):
+        print("Feature being moved is a PMT", feature_ID)
         recalculate_all_bolts(df, feature_ID, end_pt[0], end_pt[1])
+        print("Finished recalculated_all_bolts")
 
     # Bolt    
     else:
         recalculate_one_bolt(df, df_feature)
+        print("Recalculated one bolt.")
 
     return df_feature
 
 
-def plot_labels(graph, df, undistort):
+def plot_labels(graph, df):
     labels = []
 
     # Loop over all points in the dataframe
     for index, row in df.iterrows():
 
-        pmt_id = str(row[1])[:5]
-        bolt_id = str(row[1])[-2:]
+        if row[1] != None:
+            pmt_id = str(row[1])[:5]
+            bolt_id = str(row[1])[-3:]
 
-        draw_x = row[2]
-        draw_y = row[3]
-        color = 'red' if bolt_id == '00' else 'yellow'
-        text = pmt_id if bolt_id == '00' else bolt_id
+            draw_x = row[2]
+            draw_y = row[3]
+            color = 'red' if bolt_id == '-00' else 'yellow'
+            text = pmt_id if bolt_id == '-00' else bolt_id
 
-        labels.append(graph.DrawText(text=text, location=(draw_x - 10, draw_y - 10), color=color))
+            labels.append(graph.DrawText(text=text, location=(draw_x - 10, draw_y - 10), color=color))
 
     return labels
 
@@ -700,6 +618,10 @@ def get_marker_center(graph, fig):
     return curr_x, curr_y
 
 def autolabel(df, new_ref, label):
+
+    # copy all entries in the 'ID' column that begin with the same 5 digits as new_ref and don't end with '00' into the 'Labels' column
+    # after copying, replace the first 5 digits with the string, label
+    df.loc[df['ID'].apply(lambda id: (id[:5] == new_ref[:5]) & (id[-2:] != '00')), 'Labels'] = str(label) + df['ID'].str[5:]
 
     # calculate the vector from the reference PMT, new_ref to every other PMT in the dataframe (ends with '00')
     df_pmts = df[df['ID'].apply(lambda id: (id[-2:] == '00'))]
@@ -752,12 +674,11 @@ def autolabel(df, new_ref, label):
         else:
             df.at[df[df['ID'] == i].index[0], 'Labels'] = row_label
 
-            # find every bolt entry in 'ID' column with new_ref as the first 5 digits
-            # replace the first 5 digits with the row_label
-            df.loc[df['ID'].str.startswith(new_ref[:5]), 'ID'] = df.loc[df['ID'].str.startswith(new_ref[:5]), 'ID'].str.replace(new_ref[:5], str(row_label)[:5])
+            # copy all entries in the 'ID' column that begin with the same 5 digits as i and don't end with '00' into the 'Labels' column
+            # after copying, replace the first 5 digits with the string, row_label
+            df.loc[df['ID'].str.startswith(i[:5]) & ~df['ID'].str.endswith('00'), 'Labels'] = str(row_label) + df['ID'].str[5:]
 
             print("Assigned label ", row_label, " to PMT ", i)
-            print("Changed all bolt IDs with ", new_ref[:5], " to ", str(row_label)[:5])
 
 
     # assign labels to the PMTs in the same column as the reference PMT, increasing by 1 each element
@@ -768,17 +689,69 @@ def autolabel(df, new_ref, label):
             continue
         else:
             df.at[df[df['ID'] == i].index[0], 'Labels'] = col_label
-
-            # find every bolt entry in 'ID' column with new_ref as the first 5 digits
-            # replace the first 5 digits with the row_label
-            df.loc[df['ID'].str.startswith(new_ref[:5]), 'ID'] = df.loc[df['ID'].str.startswith(new_ref[:5]), 'ID'].str.replace(new_ref[:5], str(col_label)[:5])
+            # copy all entries in the 'ID' column that begin with the same 5 digits as i and don't end with '00' into the 'Labels' column
+            # after copying, replace the first 5 digits with the string, col_label
+            df.loc[df['ID'].str.startswith(i[:5]) & ~df['ID'].str.endswith('00'), 'Labels'] = str(col_label) + df['ID'].str[5:]
 
             print("Assigned label ", col_label, " to PMT ", i)
-            print("Changed all bolt IDs with ", new_ref[:5], " to ", str(col_label)[:5])
 
     print("Sorted new row", new_row)
     print("Sorted new column", new_column)
 
-    # print("New dataframe with labels", df.to_string())
-
     return df, new_ref, row, column
+
+def autolabel_plot(df):
+
+    # indicies of all the PMTs in the dataframe
+    pmt_indicies = df[df['ID'].str.endswith('00')].index
+
+    # get the number of these indicies which don't have 'None'
+
+    # get the x and y coordinates of the PMTs
+    x = np.array(df['X'].iloc[pmt_indicies])
+    y = np.array(df['Y'].iloc[pmt_indicies])
+
+    # get the labels of the PMTs
+    pmt_labels = np.array(df['Labels'].iloc[pmt_indicies])
+    print("PMT Labels", pmt_labels)
+
+    # create a new figure
+    plt.scatter(x, y, s=1)
+    plt.xlabel("Pixel Coordinates")
+    plt.ylabel("Pixel Coordinates")
+
+    # plot the labels from the pmt_labels array on the same plot as text
+    for i, txt in enumerate(pmt_labels):
+        plt.annotate(pmt_labels[i], (x[i], y[i]))
+
+    # show the plot
+    plt.show()
+
+
+def pmt_add_zeros(df):
+    # find the indicies where 'R' and 'theta' are nan
+    nan_indicies = df[df['R'].isnull()].index
+
+    # convert the values at these indicies to in the 'ID' column to strings and concatenate '00' to the end
+    df.loc[nan_indicies, 'ID'] = df.loc[nan_indicies, 'ID'].astype(str) + '-00'
+    return df
+
+def get_next_ref(df, count, row_column):
+    # look for the next PMT in the row/column
+    index = df[df['ID'] == row_column[count]].index[0]
+
+    # get the ID of the PMT at index and label
+    new_ref, new_label = df['ID'].iloc[index], df['Labels'].iloc[index]
+    print("New reference PMT from column: ", new_ref, "and label: ", new_label)
+
+    return new_ref, new_label
+
+def finalize_df(df):
+    df['ID'] = df['Labels']
+    df = df.drop(columns=['Labels'])
+
+    # fix every PMT label
+    df = pmt_add_zeros(df)
+
+    print("Final dataframe correct ID format. ", df.to_string())
+    return df
