@@ -270,10 +270,6 @@ def draw_pts(graph, df, scale=1):
             color = 'red'
             size = 8
 
-
-        # find ID in df with coordinates draw_coords and print the ID
-        # print(df.loc[(df['X'] == draw_coords[0]) & (df['Y'] == draw_coords[1])]['ID'])
-
         graph.draw_point(draw_coords, color=color, size=size)
 
 
@@ -372,10 +368,6 @@ def modify_label(df, position, id_new):
     # Update bolt_r and theta for this feature if it is a bolt
     if not str(id_new).endswith('00'):
         recalculate_one_bolt(df, df_feature)
-
-    # Warning: no treatment of existing bolts if modified label is a PMT
-    # But probably want to use a function that changes all the previous bolt labels, if any
-    # (i.e from the new PMT auto-labeling function)
 
     return df_feature
 
@@ -541,7 +533,6 @@ def make_pmt(df, pmt_id, pmt_x, pmt_y, name):
     return df
 
 def recalculate_all_bolts(df, New_ID, pmt_x, pmt_y):
-    print("Gone to recalculate_all_bolts function. New_ID[:-2] is ", New_ID[:-2])
 
     # find all entries where df['ID'] starts with New_ID[:-2] and ends not with '00' and print df['ID'] inside lambda function
     df_bolts = df[df['ID'].apply(lambda feature_id: (feature_id != None) and (feature_id[:-2] == New_ID[:-2]) and (feature_id[-2:] != '00'))]
@@ -564,9 +555,7 @@ def move_feature(df, start_pt, end_pt, name):
     # Modify X and Y in df_feature and reflect in original df, new coordinates of moved feature are end_pt
     # Modify X and Y in df_feature and reflect in original df, new coordinates of moved feature are end_pt
     df.loc[df_feature.index, 'X'] = end_pt[0]
-    print("end_pt[0] is ", end_pt[0])
     df.loc[df_feature.index, 'Y'] = end_pt[1]
-    print("end_pt[1] is ", end_pt[1])
     df.loc[df_feature.index, 'Name'] = name
     
     feature_ID = df_feature['ID'].iloc[0]
@@ -574,14 +563,11 @@ def move_feature(df, start_pt, end_pt, name):
 
     # If the feature being moved is a PMT
     if str(feature_ID).endswith('00'):
-        print("Feature being moved is a PMT", feature_ID)
         recalculate_all_bolts(df, feature_ID, end_pt[0], end_pt[1])
-        print("Finished recalculated_all_bolts")
 
     # Bolt    
     else:
         recalculate_one_bolt(df, df_feature)
-        print("Recalculated one bolt.")
 
     return df_feature
 
