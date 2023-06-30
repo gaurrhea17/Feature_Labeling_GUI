@@ -196,6 +196,7 @@ def disp_image(window, values, fnames, location):
         )
 
         index = np.where(np.array(fnames) == values["-FILE LIST-"][0])[0][0]
+        print("Image name: ", fname)
 
     elif location == 1:
 
@@ -269,10 +270,9 @@ def draw_pts(graph, df, scale=1):
             color = 'red'
             size = 8
 
-        print("Drawing point at:", draw_coords)
 
         # find ID in df with coordinates draw_coords and print the ID
-        print(df.loc[(df['X'] == draw_coords[0]) & (df['Y'] == draw_coords[1])]['ID'])
+        # print(df.loc[(df['X'] == draw_coords[0]) & (df['Y'] == draw_coords[1])]['ID'])
 
         graph.draw_point(draw_coords, color=color, size=size)
 
@@ -593,13 +593,13 @@ def plot_labels(graph, df):
     for index, row in df.iterrows():
 
         if row[1] != None:
-            pmt_id = str(row[1])[:5]
-            bolt_id = str(row[1])[-3:]
+            pmt_id = str(row[1])[:-3]
+            bolt_id = str(row[1])[-2:]
 
             draw_x = row[2]
             draw_y = row[3]
-            color = 'red' if bolt_id == '-00' else 'yellow'
-            text = pmt_id if bolt_id == '-00' else bolt_id
+            color = 'red' if bolt_id == '00' else 'yellow'
+            text = pmt_id if bolt_id == '00' else bolt_id
 
             labels.append(graph.DrawText(text=text, location=(draw_x - 10, draw_y - 10), color=color))
 
@@ -732,9 +732,14 @@ def pmt_add_zeros(df):
     # find the indicies where 'R' and 'theta' are nan
     nan_indicies = df[df['R'].isnull()].index
 
-    # convert the values at these indicies to in the 'ID' column to strings and concatenate '00' to the end
-    df.loc[nan_indicies, 'ID'] = df.loc[nan_indicies, 'ID'].astype(str) + '-00'
+    # convert the values at these indicies in the 'ID' column to strings and pad them with zeros
+    # concatenate '00' to the end of the strings
+    df.loc[nan_indicies, 'ID'] = df.loc[nan_indicies, 'ID'].astype(str).str.pad(width=5, side='left', fillchar='0') + '-00'
     return df
+
+    # convert the values at these indicies to in the 'ID' column to strings and concatenate '00' to the end
+    # df.loc[nan_indicies, 'ID'] = df.loc[nan_indicies, 'ID'].astype(str) + '-00'
+    # return df
 
 def get_next_ref(df, count, row_column):
     # look for the next PMT in the row/column
