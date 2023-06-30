@@ -737,9 +737,6 @@ def pmt_add_zeros(df):
     df.loc[nan_indicies, 'ID'] = df.loc[nan_indicies, 'ID'].astype(str).str.pad(width=5, side='left', fillchar='0') + '-00'
     return df
 
-    # convert the values at these indicies to in the 'ID' column to strings and concatenate '00' to the end
-    # df.loc[nan_indicies, 'ID'] = df.loc[nan_indicies, 'ID'].astype(str) + '-00'
-    # return df
 
 def get_next_ref(df, count, row_column):
     # look for the next PMT in the row/column
