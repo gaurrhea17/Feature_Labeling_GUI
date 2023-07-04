@@ -23,6 +23,8 @@ import cv2 as cv
 import Feature_Labeling_Functions as func
 import Feature_Labeling_Variables as var
 
+import faulthandler
+faulthandler.enable()
 
 # %% Defining window objects and layout
 
@@ -73,11 +75,11 @@ image_viewer_col_2 = [
 
 post_process_col= [
     [sg.Column(mov_col)],
+    [sg.Button('Fill Bolts', size =(15,1), key='-FILL_BOLTS-')],
     [sg.Button("Save Annotations", size = (15,1), key="-SAVE-")],
     [sg.Button("Plot Labels", size = (15,1), key="-PLOT_LABEL-"), sg.Button("Remove Labels", size = (18,1), key="-ERASE_LABEL-")],
     [sg.Button("Write CSV", size = (15,1), key="-CSV-")],
     [sg.Button("Reconstruct", size=(15,1), key="-RECON-")],
-    [sg.Button('Autolabel', size =(15,1), key='-AUTO_LABEL-')],
     [sg.Button('Zoom In'), sg.Button('Zoom Out')],
     [sg.Button("Shift R"), sg.Button("Shift L")],
     [
@@ -117,12 +119,13 @@ def main():
     pts_dir = None
     df = None
     labels = []
+    points = []
     
     while True:
         event, values = window.read()
         ## 'event' is the key string of whichever element user interacts with
         ## 'values' contains Python dictionary that maps element key to a value
-        
+
         if event == "Exit" or event == sg.WIN_CLOSED: ## end loop if user clicks "Exit" or closes window
             break;
         
@@ -155,7 +158,7 @@ def main():
                     df = func.autoload_pts(pts_fname, name, var.mtx)
                     print("Autoloaded the points. The new dataframe: \n", df)
                     Img_ID = df['Img'].iloc[0]
-                    func.draw_pts(graph, df)
+                    points = func.draw_pts(graph, df)
                     print("Drawing the points")
                     func.erase_labels(graph, labels)             
                     labels = func.plot_labels(graph, df)
@@ -184,7 +187,7 @@ def main():
                 pts_fname = os.path.join(pts_dir, pts_file) + ".txt"             
                 df = func.autoload_pts(pts_fname, name)
                 Img_ID = df['Img'].iloc[0]
-                func.draw_pts(graph, df)
+                points = func.draw_pts(graph, df)
                 func.erase_labels(graph, labels)                
                 labels = func.plot_labels(graph, df)
             except Exception as e:
@@ -339,8 +342,7 @@ def main():
 
                         print("Final dataframe with all labels. ", df.to_string())
 
-                        func.autolabel_plot(df)
-
+                        #func.autolabel_plot(df)
                         # final dataframe
                         df = func.finalize_df(df)
 
@@ -378,7 +380,7 @@ def main():
             df = func.overlay_pts(overlay_file)
             print("Overlay dataframe", df)
             Img_ID = df['Img'].iloc[0]
-            func.draw_pts(graph, df)
+            points = func.draw_pts(graph, df)
             print("Drawing points")
             func.erase_labels(graph, labels)                
             labels = func.plot_labels(graph, df)
@@ -388,6 +390,13 @@ def main():
         
         elif event == 'Copy':
             func.copy(window)
+
+        elif event == '-FILL_BOLTS-':
+            df = func.fill_bolts(df, name)
+            func.erase_pts(graph, points)
+            points = func.draw_pts(graph, df)
+            func.erase_labels(graph, labels)                
+            labels = func.plot_labels(graph, df)            
         
         elif event == '-SAVE-': ## saves annotated image and objects
             dir_name = os.path.dirname(filename)
@@ -451,10 +460,11 @@ def main():
                 
             # except:
             #     sg.popup_ok("Please check your size input format. E.g. ##, ##")
+
         
     window.refresh() ## refreshing the GUI to prevent it from hanging
     window.close() ## For when the user presses the Exit button
-    
+
 main()
 
 #%%

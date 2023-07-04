@@ -262,6 +262,8 @@ def save_element_as_file(element, fname):
 
 
 def draw_pts(graph, df, scale=1):
+    points = []
+    
     for index, row in df.iterrows():
 
         draw_coords = (float(row[2]) * scale, float(row[3]) * scale)
@@ -271,8 +273,13 @@ def draw_pts(graph, df, scale=1):
             color = 'red'
             size = 8
 
-        graph.draw_point(draw_coords, color=color, size=size)
+        points.append(graph.draw_point(draw_coords, color=color, size=size))
 
+    return points
+
+def erase_pts(graph, points):
+    for point in points:
+        graph.delete_figure(point)
 
 def autoload_pts(fname, name, mtx):
     print("Loading points file:", fname)
@@ -431,9 +438,9 @@ def angle_to(p1, p2, rotation=270, clockwise=False):
     return angle % 360
 
 
-def get_closest_pmt(df, x, y):
+def get_closest_pmt(df, x, y, idx=0):
     df_pmts = df[df['ID'].apply(lambda feature_id: float(feature_id[-2:]) == 0)]
-    df_closest = df_pmts.iloc[((df_pmts['X'] - x) ** 2 + (df_pmts['Y'] - y) ** 2).argsort()[:1]]
+    df_closest = df_pmts.iloc[((df_pmts['X'] - x) ** 2 + (df_pmts['Y'] - y) ** 2).argsort()[idx:idx+1]]
     pmt_id = df_closest['ID'].iloc[0][:5]
     pmt_x = df_closest['X'].iloc[0]
     pmt_y = df_closest['Y'].iloc[0]
@@ -447,7 +454,11 @@ def calc_bolt_properties(bolt_x, bolt_y, pmt_x, pmt_y):
 
     return bolt_r, theta
 
-def make_bolt(df, bolt_x, bolt_y, name):
+def get_bolts(df, pmt_id):
+    df_bolts = df[df['ID'].apply(lambda feature_id: (feature_id[:5] == pmt_id) & (float(feature_id[-2:]) > 0))]
+    return df_bolts
+
+def make_bolt(df, bolt_x, bolt_y, name, bolt_label=""):
     ## Find which PMT the bolt is closest to
     ### (WARNING: this will not work if the bolt is closer to a different PMT center))
 
@@ -455,7 +466,7 @@ def make_bolt(df, bolt_x, bolt_y, name):
     # print("PMT number where min. distance between bolt and dynode :", pmt_id)
 
     ## Get list of existing bolts for this PMT
-    df_bolts = df[df['ID'].apply(lambda feature_id: (feature_id[:5] == pmt_id) & (float(feature_id[-2:]) > 0))]
+    df_bolts = get_bolts(df, pmt_id)
     # print("The number of bolts for this PMT is ", len(df_bolts.index))
 
     ## Don't add more than 24 bolts
@@ -466,36 +477,38 @@ def make_bolt(df, bolt_x, bolt_y, name):
     bolt_r, theta = calc_bolt_properties(bolt_x, bolt_y, pmt_x, pmt_y)
     # print(f"Angle between PMT and bolt {theta}")
 
-    # Get entry in df_bolts with value closest to 'theta'
-    df_closest_theta = df_bolts.iloc[(abs((theta - df_bolts['theta'] + 180) % 360 - 180)).argsort()[:1]]
-    # print("Closest theta is ", df_closest_theta)
+    if bolt_label == "":
+        
+        # Get entry in df_bolts with value closest to 'theta'
+        df_closest_theta = df_bolts.iloc[(abs((theta - df_bolts['theta'] + 180) % 360 - 180)).argsort()[:1]]
+        # print("Closest theta is ", df_closest_theta)
 
-    # Assign 'ID' +1 if theta is greater than the closest theta or 'ID' -1 if theta is less than the closest theta
-    if len(df_closest_theta.index) == 0:
-        # print("No bolts for this PMT yet!")
-        bolt_label = '-01'
+        # Assign 'ID' +1 if theta is greater than the closest theta or 'ID' -1 if theta is less than the closest theta
+        if len(df_closest_theta.index) == 0:
+            # print("No bolts for this PMT yet!")
+            bolt_label = '-01'
 
-    else:
-        closest_bolt_id = int(df_closest_theta['ID'].iloc[0][-2:])
-        closest_theta = df_closest_theta['theta'].iloc[0]
-
-        # Determine if theta is clockwise to closest_theta
-        if (theta - closest_theta - 180) % 360 - 180 > 0:  # clockwise
-
-            if closest_bolt_id == var.NBOLTS:
-                bolt_label = '-01'
-
-            else:
-                bolt_label = '-{:02d}'.format(closest_bolt_id + 1)
-
-        # Counter-clockwise
         else:
+            closest_bolt_id = int(df_closest_theta['ID'].iloc[0][-2:])
+            closest_theta = df_closest_theta['theta'].iloc[0]
 
-            if closest_bolt_id == 1:
-                bolt_label = '-{:02d}'.format(var.NBOLTS)
+            # Determine if theta is clockwise to closest_theta
+            if (theta - closest_theta - 180) % 360 - 180 > 0:  # clockwise
 
+                if closest_bolt_id == var.NBOLTS:
+                    bolt_label = '-01'
+
+                else:
+                    bolt_label = '-{:02d}'.format(closest_bolt_id + 1)
+
+            # Counter-clockwise
             else:
-                bolt_label = '-{:02d}'.format(closest_bolt_id - 1)
+
+                if closest_bolt_id == 1:
+                    bolt_label = '-{:02d}'.format(var.NBOLTS)
+
+                else:
+                    bolt_label = '-{:02d}'.format(closest_bolt_id - 1)
 
     New_ID = pmt_id.zfill(5) + bolt_label
 
@@ -735,4 +748,51 @@ def finalize_df(df):
     df = pad_zeros(df)
 
     print("Final dataframe correct ID format. ", df.to_string())
+    return df
+
+def fill_bolts(df, name):
+    
+    # Get list of all PMTs
+    df_pmts = df[df['ID'].apply(lambda feature_id: float(feature_id[-2:]) == 0)]
+
+    # Loop over df_pmts
+    for index, row in df_pmts.iterrows():
+
+        # Get list of all bolts for this PMT
+        df_bolts = get_bolts(df, row['ID'][:-3])
+
+        # Already has 24 bolts, skip
+        if len(df_bolts.index) >= var.NBOLTS:
+            continue
+        
+        # Loop until finding reference PMT (with >12 bolts)
+        for idx in range(1, len(df_pmts.index)):
+            
+            # Get closest PMT to this PMT
+            pmt_id, pmt_x, pmt_y = get_closest_pmt(df_pmts, row['X'], row['Y'], idx)
+            
+            df_bolts_next = get_bolts(df, pmt_id)
+
+            if len(df_bolts_next.index) >= var.NBOLTS/2:
+                break
+            
+        # Get average bolt_r and theta
+        bolt_r = df_bolts_next['R'].mean()
+
+        # Make missing bolts
+        for ibolt in range(1, var.NBOLTS+1):
+            
+            # Check if bolt already exists in df_bolts
+            if len(df_bolts[df_bolts['ID'].apply(lambda id: float(id[-2:])) == ibolt].index) > 0:
+                continue
+
+            # Calculate bolt coordinates where angle=0 is vertical
+            angle = 2*np.pi * ( (ibolt-1)/var.NBOLTS - 1/4. )
+            bolt_x = row['X'] + bolt_r * np.cos(angle)
+            bolt_y = row['Y'] + bolt_r * -np.sin(angle)
+            
+            bolt_label = '-{:02d}'.format(ibolt)
+                
+            df = make_bolt(df, bolt_x, bolt_y, name, bolt_label)
+            
     return df
