@@ -29,6 +29,7 @@ import cv2 as cv
 
 
 import Feature_Labeling_Variables as var
+import Feature_Labeling_Diagnostic_Plot as diag_plt
 
 # %%
 
@@ -394,26 +395,25 @@ def reverseEnum(data: list):
 
 
 def duplicate_check(df):
-    # Check for duplicate IDs
-    if len(df['ID'].unique()) != len(df.index):
 
-        # List duplicate IDs
-        for i, dup_id in reverseEnum(df['ID'].unique()):
-            df_unique = df[df['ID'] == dup_id]
-            if len(df_unique.index) > 1:
-                x = df_unique['X'].iloc[0]
-                y = df_unique['Y'].iloc[0]
+    # find indicies of all duplicate rows according to the 'ID' column
+    duplicateRowsDF = df[df.duplicated(['ID'])]
 
-                df.drop_duplicates(subset=df.columns[1], keep="first",
-                                   inplace=True)  ## removing duplicate based on ID and keeping the first entry
-                df.reset_index(drop=True, inplace=True)  ## resetting indices after removing duplicates
+    # drop duplicate rows
+    df.drop_duplicates(subset=df.columns[1], keep="first", inplace=True)  ## removing duplicate based on ID and keeping the first entry
 
-                sg.popup("Duplicate ID: ", dup_id, " at (", str(x), ", " + str(y) + ") will be removed.")
+    # reset indices after removing duplicates
+    df.reset_index(drop=True, inplace=True)
+
+    # print which IDs were removed and their associated 'X' and 'Y' coordinates
+    for index, row in duplicateRowsDF.iterrows():
+        print("Duplicate ID: ", row['ID'], " at (", str(row['X']), ", " + str(row['Y']) + ") will be removed.")
+
     return df
 
 
 def write_coords_to_file(df, filename):
-    df = duplicate_check(df)
+    # df = duplicate_check(df)
     df = df.sort_values(by=['ID'])
 
     # Write X/Y column with precision 
@@ -421,7 +421,7 @@ def write_coords_to_file(df, filename):
     df['Y'] = df['Y'].map(lambda y: '{:.1f}'.format(y))
 
     headers = ["Img", "ID", "X", "Y", "Name"]
-    df[headers].to_csv(filename, index=False, header=False, sep='\t')
+    df[headers].to_csv(filename, index=False, header=False, sep='\t', na_rep='NULL')
     print("Saved .txt annotations: ", filename)
 
 def angle_to(p1, p2, rotation=270, clockwise=False):
@@ -691,8 +691,6 @@ def autolabel_plot(df):
     # indicies of all the PMTs in the dataframe
     pmt_indicies = df[df['ID'].str.endswith('00')].index
 
-    # get the number of these indicies which don't have 'None'
-
     # get the x and y coordinates of the PMTs
     x = np.array(df['X'].iloc[pmt_indicies])
     y = np.array(df['Y'].iloc[pmt_indicies])
@@ -701,26 +699,21 @@ def autolabel_plot(df):
     pmt_labels = np.array(df['Labels'].iloc[pmt_indicies])
     print("PMT Labels", pmt_labels)
 
-    # create a new figure
-    plt.scatter(x, y, s=1)
-    plt.xlabel("Pixel Coordinates")
-    plt.ylabel("Pixel Coordinates")
+    diag_plt.make_window(x, y, pmt_labels)
 
-    # plot the labels from the pmt_labels array on the same plot as text
-    for i, txt in enumerate(pmt_labels):
-        plt.annotate(pmt_labels[i], (x[i], y[i]))
+def pad_zeros(df):
 
-    # show the plot
-    plt.show()
-
-
-def pmt_add_zeros(df):
-    # find the indicies where 'R' and 'theta' are nan
+    # find the indicies where 'R' and 'theta' are nan and where they are not
     nan_indicies = df[df['R'].isnull()].index
+    not_nan_indicies = df[df['R'].notnull()].index
 
-    # convert the values at these indicies in the 'ID' column to strings and pad them with zeros
+    # convert the values at the indicies in the 'ID' column to strings and pad them with zeros
     # concatenate '00' to the end of the strings
-    df.loc[nan_indicies, 'ID'] = df.loc[nan_indicies, 'ID'].astype(str).str.pad(width=5, side='left', fillchar='0') + '-00'
+    df.loc[nan_indicies, 'ID'] = df.loc[nan_indicies, 'ID'].astype(str).str.pad(width=5, side='left', fillchar='0') + '-00' # pmts
+
+    # fix bolt labels with padding and correct number
+    df.loc[not_nan_indicies, 'ID'] = df.loc[not_nan_indicies, 'ID'].str[:-3].str.pad(width=5, side='left', fillchar='0') + '-' + df.loc[not_nan_indicies, 'ID'].str[-2:] # bolts
+
     return df
 
 
@@ -739,7 +732,7 @@ def finalize_df(df):
     df = df.drop(columns=['Labels'])
 
     # fix every PMT label
-    df = pmt_add_zeros(df)
+    df = pad_zeros(df)
 
     print("Final dataframe correct ID format. ", df.to_string())
     return df
