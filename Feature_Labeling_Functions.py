@@ -755,17 +755,17 @@ def fill_bolts(df, name):
     # Get list of all PMTs
     df_pmts = df[df['ID'].apply(lambda feature_id: float(feature_id[-2:]) == 0)]
 
-    # Loop over df_pmts
+    # Loop over all PMTs
     for index, row in df_pmts.iterrows():
 
         # Get list of all bolts for this PMT
         df_bolts = get_bolts(df, row['ID'][:-3])
 
-        # Already has 24 bolts, skip
+        # This PMT already has complete set of bolts, skip
         if len(df_bolts.index) >= var.NBOLTS:
             continue
         
-        # Loop until finding reference PMT (with >12 bolts)
+        # Find nearest reference PMT to determine radius of new bolt circle
         for idx in range(1, len(df_pmts.index)):
             
             # Get closest PMT to this PMT
@@ -773,20 +773,21 @@ def fill_bolts(df, name):
             
             df_bolts_next = get_bolts(df, pmt_id)
 
+            # Require at least half the bolt circle to be detected
             if len(df_bolts_next.index) >= var.NBOLTS/2:
                 break
             
-        # Get average bolt_r and theta
+        # Get average bolt distance from PMT center
         bolt_r = df_bolts_next['R'].mean()
 
         # Make missing bolts
         for ibolt in range(1, var.NBOLTS+1):
             
-            # Check if bolt already exists in df_bolts
+            # Check if bolt ID already exists in df_bolts
             if len(df_bolts[df_bolts['ID'].apply(lambda id: float(id[-2:])) == ibolt].index) > 0:
                 continue
 
-            # Calculate bolt coordinates where angle=0 is vertical
+            # Calculate new bolt coordinates where angle=0 is vertical
             angle = 2*np.pi * ( (ibolt-1)/var.NBOLTS - 1/4. )
             bolt_x = row['X'] + bolt_r * np.cos(angle)
             bolt_y = row['Y'] + bolt_r * -np.sin(angle)
