@@ -388,11 +388,20 @@ def modify_label(df, position, id_new, name):
 def del_point(df, position):
     df_feature = get_current_feature(df, position)
 
+    # check if the feature is a PMT
+    if str(df_feature['ID'].iloc[0]).endswith('00'):
+        # delete all bolts associated to this PMT
+        df_bolts = df[df['ID'].apply(lambda id: str(id)[:-2] == str(df_feature['ID'].iloc[0])[:-2] and not id.endswith('00'))]
+        df.drop(df_bolts.index, inplace=True)
+
+    else:
+        df_bolts = None
+
     df.drop(df_feature.index, inplace=True)
 
     df.reset_index(drop=True, inplace=True)  ## resetting indices after deleting point
 
-    return df_feature
+    return df_feature, df_bolts
 
 
 def safe_open_w(path):

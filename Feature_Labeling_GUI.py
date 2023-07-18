@@ -230,7 +230,7 @@ def main():
                 try:
                     ## drawing PMT point
                     if values["-PMT_POINT-"]:
-                        pmt_id = sg.popup_get_text('Please enter PMT ID', title="Adding PMT")
+                        pmt_id = sg.popup_get_text('Please enter PMT ID #####', title="Adding PMT")
                         if pmt_id:
                             df = func.make_pmt(df, pmt_id, x, y, name)
                             graph.draw_point((x,y), color = 'red', size=8)
@@ -268,10 +268,25 @@ def main():
             elif values['-ERASE-']:
                 try:
                     if len(figures)>1:
-                        graph.delete_figure(fig)
-                        df_erased_feature = func.del_point(df, start_pt)
 
-                        window["-INFO-"].update(value=f"Erased point {df_erased_feature['ID'].iloc[0]}")
+                        # ask user if they're sure that they want to delete the point in question
+                        if sg.popup_yes_no('Are you sure you want to delete this point?', title="Deleting Point") == 'Yes':
+
+                            graph.delete_figure(fig)
+                            df_erased_feature, df_erased_bolts = func.del_point(df, start_pt)
+
+                            # delete the bolts from df_erased_bolts from the graph
+                            if df_erased_bolts is not None:
+                                for index, row in df_erased_bolts.iterrows():
+                                    # find the bolts in the graph
+                                    for fig in graph.get_figures_at_location((row['X'], row['Y']))[1:]:
+                                        graph.delete_figure(fig)
+                                        break
+
+                            window["-INFO-"].update(value=f"Erased point {df_erased_feature['ID'].iloc[0]}")
+
+                        elif sg.popup_yes_no('Are you sure you want to delete this point?', title="Deleting Point") == 'No':
+                            pass
 
                 except Exception as e:
                     print(e)
@@ -313,7 +328,7 @@ def main():
 
                         # get the index of the first pmt and get user input for this PMT's label. Put input into df['Labels'] column at index
                         index = df[df['ID'] == first_pmt].index[0]
-                        label = int(sg.popup_get_text('Please enter label', title="Adding Label"))
+                        label = int(sg.popup_get_text('Please enter label #####', title="Adding Label"))
                         df.at[index, 'Labels'] = label
                         print("Inserted label into dataframe.")
 
@@ -460,5 +475,4 @@ def main():
     
 main()
 
-#%%
 
