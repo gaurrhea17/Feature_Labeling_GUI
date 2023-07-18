@@ -15,6 +15,30 @@ def figure(x, y, labels):
     for i, txt in enumerate(labels):
         ax.annotate(labels[i], (x[i], y[i]))
 
+
+    # Major ticks every 500, minor ticks every 100
+    major_ticks_x = np.arange(0, 4000, 500)
+    minor_ticks_x = np.arange(0, 4000, 100)
+
+    major_ticks_y = np.arange(0, 2750, 500)
+    minor_ticks_y = np.arange(0, 2750, 100)
+
+    ax.set_xticks(major_ticks_x)
+    ax.set_xticks(minor_ticks_x, minor=True)
+    ax.set_yticks(major_ticks_y)
+    ax.set_yticks(minor_ticks_y, minor=True)
+
+    # Add corresponding grid
+    ax.grid(which='both', axis='both', linestyle='--')
+
+    # automatically adjust how much of the plot is shown to fit all points with a small margin
+    ax.set_xlim([min(x) - 100, max(x) + 100])
+    ax.set_ylim([min(y) - 100, max(y) + 100])
+
+    # set axis labels
+    ax.set_xlabel('x [pixels]')
+    ax.set_ylabel('y [pixels]')
+
     return fig, ax
 
 
