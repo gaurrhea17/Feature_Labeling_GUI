@@ -51,10 +51,10 @@ mov_col = [[sg.T('Choose what you want to do:', enable_events=True)],
            [sg.R('Draw bolt points', 1,  key='-BOLT_POINT-', enable_events=True)],
            [sg.R('Erase item', 1, key='-ERASE-', enable_events=True)],
            [sg.R('Modify label', 1, key='-MODIFY-', enable_events=True)],
-           [sg.R('Erase all', 1, key='-CLEAR-', enable_events=True)],
-           [sg.R('Send to back', 1, key='-BACK-', enable_events=True)],
-           [sg.R('Bring to front', 1, key='-FRONT-', enable_events=True)],
-           [sg.R('Move Everything', 1, key='-MOVEALL-', enable_events=True)],
+           # [sg.R('Erase all', 1, key='-CLEAR-', enable_events=True)],
+           # [sg.R('Send to back', 1, key='-BACK-', enable_events=True)],
+           # [sg.R('Bring to front', 1, key='-FRONT-', enable_events=True)],
+           # [sg.R('Move Everything', 1, key='-MOVEALL-', enable_events=True)],
            [sg.R('Move Stuff', 1, key='-MOVE-', enable_events=True)],
            [sg.R("Auto-label", 1, key='-LABELING-', enable_events=True)],
            [sg.R('Cursor Position (Click & Hold)', 1,  key='-SCAN_POSITION-', enable_events=True)],
@@ -156,10 +156,8 @@ def main():
                     print("Autoloaded the points. The new dataframe: \n", df)
                     Img_ID = df['Img'].iloc[0]
                     func.draw_pts(graph, df)
-                    print("Drawing the points")
-                    func.erase_labels(graph, labels)
-                    labels = func.plot_labels(graph, df)
-                    print("Plotting the labels.")
+                    labels = func.reload_plot_labels(graph, df, labels)
+
                 except Exception as e:
                     print(e)
                     print("No associated points file found.")
@@ -185,8 +183,7 @@ def main():
                 df = func.autoload_pts(pts_fname, name)
                 Img_ID = df['Img'].iloc[0]
                 func.draw_pts(graph, df)
-                func.erase_labels(graph, labels)
-                labels = func.plot_labels(graph, df)
+                labels = func.reload_plot_labels(graph, df, labels)
             except Exception as e:
                 print(e)
                 print("No associated points file found.")
@@ -242,6 +239,8 @@ def main():
                         ## along with the angle between the dynode and the bolt
                             df = func.make_bolt(df, x, y, name)
                             graph.draw_point((x,y), color = 'yellow', size=6)
+
+                    labels = func.reload_plot_labels(graph, df, labels)
 
                     window["-INFO-"].update(value=f'Made point {df["ID"].iloc[-1]} at ({x}, {y})')
                     made_point = True
@@ -354,16 +353,24 @@ def main():
 
                             count += 1
 
+                        # make a list of PMT IDs with labels = None
+                        print("Now looking for unlabeled PMTs.")
+                        df_unlabeled = func.get_unlabeled(df) ## returns a list of unlabeled PMTs
+                        print("Unlabeled PMTs: ", df_unlabeled)
+                        print(type(df_unlabeled))
 
+                        # pass each PMT from the df_unlabeled list through the finish_labels function
+                        for i in range(len(df_unlabeled)):
+                            df = func.finish_labels(df, df_unlabeled[i])
 
-                        # print("Final dataframe with all labels. ", df.to_string())
+                        print("Final dataframe with all labels. ", df.to_string())
 
                         func.autolabel_plot(df)
 
                         # final dataframe
                         df = func.finalize_df(df)
 
-                        window["-INFO-"].update(value=f'Auto labeled PMTs')
+                        window["-INFO-"].update(value=f'Autolabeled PMTs')
 
                         first_pmt = None  ## to allow autolabeling again
 
@@ -376,8 +383,7 @@ def main():
                         print("Auto labeling failed. Please select 'Autolabel' again.")
                         window["-INFO-"].update(value=f'Failed to auto label PMTs')
 
-            func.erase_labels(graph, labels)
-            labels = func.plot_labels(graph, df)
+            labels = func.reload_plot_labels(graph, df, labels)
 
             # unselect 'Autolabel' radio button allow autolabeling again
             window['-LABELING-'].update(value=False, visible=True)
@@ -397,10 +403,9 @@ def main():
             print("Overlay dataframe", df)
             Img_ID = df['Img'].iloc[0]
             func.draw_pts(graph, df)
-            print("Drawing points")
-            func.erase_labels(graph, labels)                
-            labels = func.plot_labels(graph, df)
-            print("Plotting labels")
+
+            labels = func.reload_plot_labels(graph, df, labels)
+
 
 ## ======================== Menubar functions =======================================        
         
@@ -414,8 +419,7 @@ def main():
             # func.save_element_as_file(column, annotate_fname)
             
         elif event == '-PLOT_LABEL-':
-            func.erase_labels(graph, labels)                
-            labels = func.plot_labels(graph, df)
+            labels = func.reload_plot_labels(graph, df, labels)
             
         elif event == '-ERASE_LABEL-':
             func.erase_labels(graph, labels)
