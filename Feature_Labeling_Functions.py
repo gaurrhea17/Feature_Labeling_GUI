@@ -367,26 +367,48 @@ def recalculate_one_bolt(df, df_feature):
     df.loc[df_feature.index, 'R'] = bolt_r
     df.loc[df_feature.index, 'theta'] = theta
 
-def modify_label(df, position, id_new):
+def modify_label(df, position, id_new, name):
     df_feature = get_current_feature(df, position)
+
+    # get the 'ID' entry from df_feature
+    feature_ID = df.at[df_feature.index[0], 'ID']
 
     # Directly modify ID of feature in original dataframe
     df.loc[df_feature.index, 'ID'] = id_new
 
+    # Relabel all bolts associated to this PMT
+    if str(id_new).endswith('00'):
+        df_bolts = df[df['ID'].apply(lambda id: str(id)[:-2] == str(feature_ID)[:-2] and not id.endswith('00'))]
+
+        # replace the first 5 characters of all bolts with the first 5 characters of id_new
+        df.loc[df_bolts.index, 'ID'] = df_bolts['ID'].apply(lambda id: str(id_new)[:-2] + str(id)[-2:])
+
     # Update bolt_r and theta for this feature if it is a bolt
     if not str(id_new).endswith('00'):
         recalculate_one_bolt(df, df_feature)
+
+    # update name for this feature
+    df.loc[df_feature.index, 'Name'] = name
 
     return df_feature
 
 def del_point(df, position):
     df_feature = get_current_feature(df, position)
 
+    # check if the feature is a PMT
+    if str(df_feature['ID'].iloc[0]).endswith('00'):
+        # delete all bolts associated to this PMT
+        df_bolts = df[df['ID'].apply(lambda id: str(id)[:-2] == str(df_feature['ID'].iloc[0])[:-2] and not id.endswith('00'))]
+        df.drop(df_bolts.index, inplace=True)
+
+    else:
+        df_bolts = None
+
     df.drop(df_feature.index, inplace=True)
 
     df.reset_index(drop=True, inplace=True)  ## resetting indices after deleting point
 
-    return df_feature
+    return df_feature, df_bolts
 
 
 def safe_open_w(path):
@@ -609,6 +631,10 @@ def erase_labels(graph, labels):
     for label in labels:
         graph.delete_figure(label)
 
+def reload_plot_labels(graph, df, labels):
+    erase_labels(graph, labels)
+    labels = plot_labels(graph, df)
+    return labels
 
 def get_marker_center(graph, fig):
     current_coords = graph.get_bounding_box(fig)
@@ -616,88 +642,220 @@ def get_marker_center(graph, fig):
     curr_y = (current_coords[0][1] + current_coords[1][1]) / 2
     return curr_x, curr_y
 
+
+def calc_row_col(df, new_ref):
+
+    # calculate the vector from the reference PMT, new_ref to every other PMT in the dataframe (ends with '00')
+    df_pmts = df[df['ID'].apply(lambda id: (str(id)[-2:] == '00'))]
+
+    # get the x and y coordinates of the reference PMT
+    x_ref = df[df['ID'] == new_ref]['X'].iloc[0]
+    y_ref = df[df['ID'] == new_ref]['Y'].iloc[0]
+
+    x_bound_left = x_ref - var.row_col_bound
+    x_bound_right = x_ref + var.row_col_bound
+
+    y_bound_bottom = y_ref - var.row_col_bound
+    y_bound_top = y_ref + var.row_col_bound
+
+    # make a list of all the PMTs with x-coordinates between x_bound_left and x_bound_right
+    column = df_pmts[df_pmts['X'].apply(lambda x: x_bound_left < x < x_bound_right)]['ID'].tolist()
+
+    # make a list of all the PMTs with y-coordinates between y_bound_bottom and y_bound_top
+    row = df_pmts[df_pmts['Y'].apply(lambda y: y_bound_bottom < y < y_bound_top)]['ID'].tolist()
+
+    ## organize the PMTs in the same row such in order of increasing x-coordinate
+    row.sort(key=lambda id: df[df['ID'] == id]['X'].iloc[0])
+    print("The number of PMTs in the same row as the reference PMT, new_ref, is", len(row))
+
+    ## organize the PMTs in the same column such in order of increasing y-coordinate
+    column.sort(key=lambda id: df[df['ID'] == id]['Y'].iloc[0])
+    print("The number of PMTs in the same column as the reference PMT, new_ref, is", len(column))
+
+    # put all the PMTs from row with x-coordinate less than x_ref in a list
+    lesser_x_row = [id for id in row if df_pmts[df_pmts['ID'] == id]['X'].iloc[0] < x_ref]
+    lesser_x_row.reverse()
+
+    # put all the PMTs from row with x-coordinate greater than x_ref in a list
+    greater_x_row = [id for id in row if df_pmts[df_pmts['ID'] == id]['X'].iloc[0] > x_ref]
+
+    # put all the PMTs from column with y-coordinate less than y_ref in a list
+    lesser_y_col = [id for id in column if df_pmts[df_pmts['ID'] == id]['Y'].iloc[0] < y_ref]
+
+    # reverse the order of the PMTs in the column with y-coordinate less than y_ref
+    lesser_y_col.reverse()
+
+    # put all the PMTs from column with y-coordinate greater than y_ref in a list
+    greater_y_col = [id for id in column if df_pmts[df_pmts['ID'] == id]['Y'].iloc[0] > y_ref]
+
+    row = lesser_x_row + greater_x_row
+    print("Final row is", row, ".")
+    column = lesser_y_col + greater_y_col
+    print("Final column is", column, ".")
+
+    return df_pmts, lesser_x_row, greater_x_row, lesser_y_col, greater_y_col, row, column
+
+def assign_adjacent_labels(df, pmt, label):
+    # find pmt in the 'ID' column of the dataframe and check if an entry has been made in the 'Labels' column
+    # if there is an entry, do nothing. If not, assign 'label' to it
+
+    if df[df['ID'] == pmt]['Labels'].iloc[0] != None:
+        return df
+    else:
+        df.at[df[df['ID'] == pmt].index[0], 'Labels'] = label
+        print("Assigned label ", label, " to PMT ", pmt)
+
+        # copy all entries in the 'ID' column that begin with the same 5 digits as pmt and don't end with '00' into the 'Labels' column
+        # after copying, replace the first 5 digits with the string, label
+        df.loc[df['ID'].apply(lambda id: (str(id)[:-3] == str(pmt)[:-3]) & (str(id)[-2] != '00')), 'Labels'] = str(label) + df['ID'].str[-3:]
+        print("Assigned label ", label, " to bolts for this PMT ", pmt)
+
+        return df
+
 def autolabel(df, new_ref, label):
 
     # copy all entries in the 'ID' column that begin with the same 5 digits as new_ref and don't end with '00' into the 'Labels' column
     # after copying, replace the first 5 digits with the string, label
-    df.loc[df['ID'].apply(lambda id: (id[:5] == new_ref[:5]) & (id[-2:] != '00')), 'Labels'] = str(label) + df['ID'].str[5:]
+    df.loc[df['ID'].apply(lambda id: (str(id)[:-3] == str(new_ref)[:-3]) & (str(id)[-2:] != '00')), 'Labels'] = str(label) + df['ID'].str[-3:]
 
-    # calculate the vector from the reference PMT, new_ref to every other PMT in the dataframe (ends with '00')
-    df_pmts = df[df['ID'].apply(lambda id: (id[-2:] == '00'))]
-
-    df_pmts['vector'] = df_pmts.apply(lambda row: [row['X'] - df_pmts[df_pmts['ID'] == new_ref]['X'].iloc[0],
-                                                    row['Y'] - df_pmts[df_pmts['ID'] == new_ref]['Y'].iloc[0]], axis=1)
-
-
-    # calculate the angle between the vector and the x-axis
-    # If the angle is less than 45 degrees, then the PMT is in the same row as the reference PMT, new_ref.
-    df_pmts['angle'] = df_pmts.apply(lambda row: np.arctan(row['vector'][1] / row['vector'][0]) * 180 / np.pi, axis=1)
-
-    # make a list of all the PMTs in the same row as the reference PMT
-    row = df_pmts[df_pmts['angle'].apply(lambda angle: abs(angle) < 7)]['ID'].tolist()
-
-    # calculate the angle between the vector and the y-axis
-    # If the angle is less than 45 degrees, then the PMT is in the same column as the reference PMT, new_ref.
-    df_pmts['angle'] = df_pmts.apply(lambda row: np.arctan(row['vector'][0] / row['vector'][1]) * 180 / np.pi, axis=1)
-
-    # make a list of all the PMTs in the same column as the reference PMT
-    column = df_pmts[df_pmts['angle'].apply(lambda angle: abs(angle) < 7)]['ID'].tolist()
-
-    ## organize the PMTs in the same row such in order of increasing x-coordinate
-    row.sort(key=lambda id: df[df['ID'] == id]['X'].iloc[0])
-
-    ## organize the PMTs in the same column such in order of decreasing y-coordinate
-    column.sort(key=lambda id: df[df['ID'] == id]['Y'].iloc[0], reverse=True)
+    # finding PMTs in the same row and column as reference PMT, new_ref
+    df_pmts, lesser_x_row, greater_x_row, lesser_y_col, greater_y_col, row, column = calc_row_col(df, new_ref)
 
     row_label = int(label) # used as a buffer row label to assign labels to the PMTs in the same row as the reference PMT
     col_label = int(label) # used as a buffer column label to assign labels to the PMTs in the same column as the reference PMT
 
-    # make new list of PMTs in the same row as the reference PMT with x coordinate greater than the reference PMT
-    new_row = []
-    for i in row:
-        if df[df['ID'] == i]['X'].iloc[0] > df[df['ID'] == new_ref]['X'].iloc[0]:
-            new_row.append(i)
-
-    # make new list of PMTs in the same column as the reference PMT with y coordinate less than the reference PMT
-    new_column = []
-    for i in column:
-        if df[df['ID'] == i]['Y'].iloc[0] < df[df['ID'] == new_ref]['Y'].iloc[0]:
-            new_column.append(i)
-
     # assign labels to the PMTs in the same row as the reference PMT, increasing by 51 each element
-    for i in new_row:
+    for i in greater_x_row:
+        row_label -= 51
+
+        # if df[df['ID'] == i]['Labels'].iloc[0] != None:
+        #     continue
+        #
+        # else:
+        df.at[df[df['ID'] == i].index[0], 'Labels'] = row_label
+
+        # copy all entries in the 'ID' column that begin with the same 5 digits as i and don't end with '00' into the 'Labels' column
+        # after copying, replace the first 5 digits with the string, row_label
+        df.loc[df['ID'].apply(lambda id: (str(id)[:-3] == str(i)[:-3]) & (str(id)[-2:] != '00')), 'Labels'] = str(row_label) + df['ID'].str[-3:]
+        print("Assigned label ", row_label, " to PMT ", i)
+
+    row_label = int(label) # reset row_label to the original label
+
+    # assign labels to the PMTs in lesser_x_row, decreasing by 51 each element
+    for i in lesser_x_row:
         row_label += 51
-        # if no label, assign a label
-        if df[df['ID'] == i]['Labels'].iloc[0] == row_label:
-            continue
-        else:
-            df.at[df[df['ID'] == i].index[0], 'Labels'] = row_label
 
-            # copy all entries in the 'ID' column that begin with the same 5 digits as i and don't end with '00' into the 'Labels' column
-            # after copying, replace the first 5 digits with the string, row_label
-            df.loc[df['ID'].str.startswith(i[:5]) & ~df['ID'].str.endswith('00'), 'Labels'] = str(row_label) + df['ID'].str[5:]
+        # if df[df['ID'] == i]['Labels'].iloc[0] != None:
+        #     continue
+        #
+        # else:
+        df.at[df[df['ID'] == i].index[0], 'Labels'] = row_label
 
-            print("Assigned label ", row_label, " to PMT ", i)
-
+        # copy all entries in the 'ID' column that begin with the same 5 digits as i and don't end with '00' into the 'Labels' column
+        # after copying, replace the first 5 digits with the string, row_label
+        df.loc[df['ID'].apply(lambda id: (str(id)[:-3] == str(i)[:-3]) & (str(id)[-2:] != '00')), 'Labels'] = str(row_label) + df['ID'].str[-3:]
+        print("Assigned label ", row_label, " to PMT ", i)
 
     # assign labels to the PMTs in the same column as the reference PMT, increasing by 1 each element
-    for i in new_column:
+    for i in lesser_y_col:
+        col_label -= 1
+
+        # if df[df['ID'] == i]['Labels'].iloc[0] != None:
+        #     continue
+        #
+        # else:
+        df.at[df[df['ID'] == i].index[0], 'Labels'] = col_label
+
+        # copy all entries in the 'ID' column that begin with the same 5 digits as i and don't end with '00' into the 'Labels' column
+        # after copying, replace the first 5 digits with the string, col_label
+        df.loc[df['ID'].apply(lambda id: (str(id)[:-3] == str(i)[:-3]) & (str(id)[-2:] != '00')), 'Labels'] = str(col_label) + df['ID'].str[-3:]
+        print("Assigned label ", col_label, " to PMT ", i)
+
+    col_label = int(label) # reset col_label to the original label
+
+    # assign labels to the PMTs in the same column as the reference PMT, decreasing by 1 each element
+    for i in greater_y_col:
         col_label += 1
-        # if no label exists for this PMT, assign a label
-        if df[df['ID'] == i]['Labels'].iloc[0] == col_label:
-            continue
-        else:
-            df.at[df[df['ID'] == i].index[0], 'Labels'] = col_label
-            # copy all entries in the 'ID' column that begin with the same 5 digits as i and don't end with '00' into the 'Labels' column
-            # after copying, replace the first 5 digits with the string, col_label
-            df.loc[df['ID'].str.startswith(i[:5]) & ~df['ID'].str.endswith('00'), 'Labels'] = str(col_label) + df['ID'].str[5:]
+        #
+        # if df[df['ID'] == i]['Labels'].iloc[0] != None:
+        #     continue
+        # else:
+        df.at[df[df['ID'] == i].index[0], 'Labels'] = col_label
 
-            print("Assigned label ", col_label, " to PMT ", i)
+        # copy all entries in the 'ID' column that begin with the same 5 digits as i and don't end with '00' into the 'Labels' column
+        # after copying, replace the first 5 digits with the string, col_label
+        df.loc[df['ID'].apply(lambda id: (str(id)[:-3] == str(i)[:-3]) & (str(id)[-2:] != '00')), 'Labels'] = str(col_label) + df['ID'].str[-3:]
+        print("Assigned label ", col_label, " to PMT ", i)
 
-    print("Sorted new row", new_row)
-    print("Sorted new column", new_column)
+    row = lesser_x_row + greater_x_row
+    column = lesser_y_col + greater_y_col
+    print("Sorted new row", lesser_x_row, greater_x_row)
+    print("Sorted new column", lesser_y_col, greater_y_col)
 
-    return df, new_ref, row, column
+    return df, new_ref, lesser_x_row, greater_x_row, lesser_y_col, greater_y_col, row, column
+
+
+def finish_labels(df, ref):
+
+    # calculate the row and column of the reference PMT
+    df_pmts, lesser_x_row, greater_x_row, lesser_y_col, greater_y_col, row, column = calc_row_col(df, ref)
+
+    row_df = df_pmts[df_pmts['ID'].apply(lambda id: id in row)]
+    col_df = df_pmts[df_pmts['ID'].apply(lambda id: id in column)]
+
+    print("Row and column without the reference PMT: ", row_df, col_df)
+
+    # find the reference PMT in df_pmts and add it to row_df and col_df
+    ref_df = df_pmts[df_pmts['ID'] == ref]
+    row_df = pd.concat([row_df, ref_df])
+    col_df = pd.concat([col_df, ref_df])
+    print("Row and column with the reference PMT: ", row_df, col_df)
+
+
+    row_df = row_df.sort_values(by=['X'])
+    col_df = col_df.sort_values(by=['Y'])
+    print("Sorted row and column: ", row_df, col_df)
+
+
+    # look through row_df to find the first entry with a label that is not None. Call this label value 'col_label'. Assign each subsequent PMT in col_df a label that is 51 lesser than the previous PMT's label.
+    # assign each PMT before the first PMT with a label that is not None a label that is 51 greater than the first PMT's label
+    for i in col_df['ID']:
+        if col_df[col_df['ID'] == i]['Labels'].iloc[0] != None:
+            col_label = int(col_df[col_df['ID'] == i]['Labels'].iloc[0])
+            print("The first PMT with a label is ", i, " with label ", col_label)
+            # reset indicies of col_df
+            col_df = col_df.reset_index(drop=True)
+            # find index of i in col_df
+            col_index = col_df[col_df['ID'] == i].index[0]
+            print("The index of ", i, " is ", col_index)
+            break
+
+    buffer = col_label
+
+    # assign labels to all PMTs in col_df after col_index with a label that is 51 lesser than the previous PMT's label
+    for i in col_df['ID'].iloc[col_index+1:]:
+        buffer += 1
+        df.at[df[df['ID'] == i].index[0], 'Labels'] = buffer
+
+        # copy all entries in the 'ID' column that begin with the same 5 digits as i and don't end with '00' into the 'Labels' column
+        # after copying, replace the first 5 digits with the string, col_label
+        df.loc[df['ID'].apply(lambda id: (str(id)[:-3] == str(i)[:-3]) & (str(id)[-2:] != '00')), 'Labels'] = str(buffer) + df['ID'].str[-3:]
+        print("Assigned label ", buffer, " to PMT ", i)
+
+    buffer = col_label
+
+    # assign labels to all PMTs in col_df before col_index with a label that is 1 less than the previous PMT's label
+    for i in col_df['ID'].iloc[:col_index]:
+        buffer -= 1
+        df.at[df[df['ID'] == i].index[0], 'Labels'] = buffer
+
+        # copy all entries in the 'ID' column that begin with the same 5 digits as i and don't end with '00' into the 'Labels' column
+        # after copying, replace the first 5 digits with the string, col_label
+        df.loc[df['ID'].apply(lambda id: (str(id)[:-3] == str(i)[:-3]) & (str(id)[-2:] != '00')), 'Labels'] = str(buffer) + df['ID'].str[-3:]
+        print("Assigned label ", buffer, " to PMT ", i)
+
+
+    return df
 
 def autolabel_plot(df):
 
@@ -714,18 +872,23 @@ def autolabel_plot(df):
 
     diag_plt.make_window(x, y, pmt_labels)
 
-def pad_zeros(df):
+def pad_zeros(not_none_labels, df):
 
     # find the indicies where 'R' and 'theta' are nan and where they are not
-    nan_indicies = df[df['R'].isnull()].index
-    not_nan_indicies = df[df['R'].notnull()].index
+    PMT_indicies = df[df['R'].isnull()].index # PMTs
+    bolt_indicies = df[df['R'].notnull()].index # bolts
+
+    # keep only matching indicies between PMT_indicies and not_none_labels in PMT_indicies
+    # repeat with bolt_indicies
+    PMT_indicies = [i for i in PMT_indicies if i in not_none_labels]
+    bolt_indicies = [i for i in bolt_indicies if i in not_none_labels]
 
     # convert the values at the indicies in the 'ID' column to strings and pad them with zeros
     # concatenate '00' to the end of the strings
-    df.loc[nan_indicies, 'ID'] = df.loc[nan_indicies, 'ID'].astype(str).str.pad(width=5, side='left', fillchar='0') + '-00' # pmts
+    df.loc[PMT_indicies, 'ID'] = df.loc[PMT_indicies, 'ID'].astype(str).str.pad(width=5, side='left', fillchar='0') + '-00' # pmts
 
     # fix bolt labels with padding and correct number
-    df.loc[not_nan_indicies, 'ID'] = df.loc[not_nan_indicies, 'ID'].str[:-3].str.pad(width=5, side='left', fillchar='0') + '-' + df.loc[not_nan_indicies, 'ID'].str[-2:] # bolts
+    df.loc[bolt_indicies, 'ID'] = df.loc[bolt_indicies, 'ID'].str[:-3].str.pad(width=5, side='left', fillchar='0') + '-' + df.loc[bolt_indicies, 'ID'].str[-2:] # bolts
 
     return df
 
@@ -736,16 +899,20 @@ def get_next_ref(df, count, row_column):
 
     # get the ID of the PMT at index and label
     new_ref, new_label = df['ID'].iloc[index], df['Labels'].iloc[index]
-    print("New reference PMT from column: ", new_ref, "and label: ", new_label)
+    print("New reference PMT: ", new_ref, "and label: ", new_label)
 
     return new_ref, new_label
 
 def finalize_df(df):
-    df['ID'] = df['Labels']
+
+    # get the indices for the entries which don't have None in the 'Labels' column
+    not_none_indicies = df[df['Labels'].notnull()].index
+
+    df.loc[df['Labels'].notnull(), 'ID'] = df.loc[df['Labels'].notnull(), 'Labels']
+
     df = df.drop(columns=['Labels'])
 
-    # fix every PMT label
-    df = pad_zeros(df)
+    df = pad_zeros(not_none_indicies, df)
 
     print("Final dataframe correct ID format. ", df.to_string())
     return df
@@ -797,3 +964,13 @@ def fill_bolts(df, name):
             df = make_bolt(df, bolt_x, bolt_y, name, bolt_label)
             
     return df
+
+
+def get_unlabeled(df):
+
+    # find PMTs with labels = None in the dataframe and end in '00'
+    unlabeled = df[(df['Labels'].isnull()) & (df['ID'].str.endswith('00'))]
+
+    # return a list of the IDs of the unlabeled PMTs
+    return list(unlabeled['ID'])
+

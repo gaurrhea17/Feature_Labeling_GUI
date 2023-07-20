@@ -29,8 +29,8 @@ faulthandler.enable()
 # %% Defining window objects and layout
 
 # sg.theme_previewer() ## Use to see all the colour themes available
-sg.theme('LightBlue') ## setting window colour scheme
-sg.set_options(dpi_awareness=True) ## setting window options
+sg.theme('LightPurple') ## setting window colour scheme
+# sg.set_options(dpi_awareness=True) ## setting window options
 
 ## Top menubar options
 menu_butts = [['File', ['New', 'Open', 'Save', 'Exit', ]], ['Edit', ['Copy', '&Undo point', 'Resize Image', 'Change Canvas Size'], ],  ['Help', 'About...'], ]
@@ -53,16 +53,16 @@ mov_col = [[sg.T('Choose what you want to do:', enable_events=True)],
            [sg.R('Draw bolt points', 1,  key='-BOLT_POINT-', enable_events=True)],
            [sg.R('Erase item', 1, key='-ERASE-', enable_events=True)],
            [sg.R('Modify label', 1, key='-MODIFY-', enable_events=True)],
-           [sg.R('Erase all', 1, key='-CLEAR-', enable_events=True)],
-           [sg.R('Send to back', 1, key='-BACK-', enable_events=True)],
-           [sg.R('Bring to front', 1, key='-FRONT-', enable_events=True)],
-           [sg.R('Move Everything', 1, key='-MOVEALL-', enable_events=True)],
+           # [sg.R('Erase all', 1, key='-CLEAR-', enable_events=True)],
+           # [sg.R('Send to back', 1, key='-BACK-', enable_events=True)],
+           # [sg.R('Bring to front', 1, key='-FRONT-', enable_events=True)],
+           # [sg.R('Move Everything', 1, key='-MOVEALL-', enable_events=True)],
            [sg.R('Move Stuff', 1, key='-MOVE-', enable_events=True)],
            [sg.R("Auto-label", 1, key='-LABELING-', enable_events=True)],
            [sg.R('Cursor Position (Click & Hold)', 1,  key='-SCAN_POSITION-', enable_events=True)],
            ]
 
-column = [[sg.Graph(canvas_size = (var.width, var.height), graph_bottom_left = (0,0), graph_top_right = (var.width,var.height), 
+column = [[sg.Graph(canvas_size = (var.width, var.height), graph_bottom_left = (0,0), graph_top_right = (var.width,var.height),
 key = "-GRAPH-", ## can include "change_submits = True"
 background_color = 'white', expand_x =True, expand_y = True, enable_events = True, drag_submits = True, right_click_menu=[[],['Erase Item',]])]]
 
@@ -75,19 +75,20 @@ image_viewer_col_2 = [
 
 post_process_col= [
     [sg.Column(mov_col)],
-    [sg.Button('Fill Bolts', size =(15,1), key='-FILL_BOLTS-')],
-    [sg.Button("Save Annotations", size = (15,1), key="-SAVE-")],
+    [sg.Button('Fill Bolts', size =(15,1), key='-FILL_BOLTS-')],  
+    # [sg.Button("Save Annotations", size = (15,1), key="-SAVE-")], ## was supposed to save image with points drawn on it that could be loaded into GUI
     [sg.Button("Plot Labels", size = (15,1), key="-PLOT_LABEL-"), sg.Button("Remove Labels", size = (18,1), key="-ERASE_LABEL-")],
     [sg.Button("Write CSV", size = (15,1), key="-CSV-")],
-    [sg.Button("Reconstruct", size=(15,1), key="-RECON-")],
-    [sg.Button('Zoom In'), sg.Button('Zoom Out')],
-    [sg.Button("Shift R"), sg.Button("Shift L")],
+    # [sg.Button("Reconstruct", size=(15,1), key="-RECON-")], # was supposed to open panel to perform real-time reconstruction
+    [sg.Button('Autolabel', size =(15,1), key='-AUTO_LABEL-')],
+    # [sg.Button('Zoom In'), sg.Button('Zoom Out')],
+    # [sg.Button("Shift R"), sg.Button("Shift L")], # was supposed to shift image left or right
     [
      sg.Text("Choose a file of overlay points: "),
      sg.In(size=(18,1), enable_events =True, key="-OVERLAY-"),
      sg.FileBrowse()],
      ]
-    
+
 
 
 ## Main function
@@ -96,21 +97,21 @@ def main():
     # ------ Full Window Layout
     layout= [
         [menubar, sg.Column(file_list_col), sg.VSeperator(), sg.Column(image_viewer_col_2), sg.VSeperator(), sg.Column(post_process_col),
-         [sg.Button("Prev", size=(10,1), key="-PREV-"), sg.Button("Next", size=(10,1), key="-NEXT-")],]] 
-    
+         [sg.Button("Prev", size=(10,1), key="-PREV-"), sg.Button("Next", size=(10,1), key="-NEXT-")],]]
+
     window = sg.Window("Image Labeling GUI", layout, resizable=True) ## putting together the user interface
-    
-    
+
+
     location = 0
-    
-    graph = window["-GRAPH-"] 
+
+    graph = window["-GRAPH-"]
 
     name = None
-    while name is None:    
+    while name is None:
         name = sg.popup_get_text('Please enter your initials', title="Name initials")
-        
+
     Img_ID = None
-    
+
     dragging = False
     made_point = False
     start_pt = end_pt = None
@@ -128,51 +129,50 @@ def main():
 
         if event == "Exit" or event == sg.WIN_CLOSED: ## end loop if user clicks "Exit" or closes window
             break;
-        
+
         # Folder name filled in, we'll now make a list of files in the folder
         if event == "-FOLDER-": ## checking if the user has chosen a folder
             fnames = func.parse_folder(window, values)
-                        
+
         elif event == "-FILE LIST-": ## User selected a file from the listbox
-            
+
             if len(values["-FOLDER-"]) == 0 : ## If user selected listbox before browsing folders
                 select_folder = sg.popup_ok("Please select a folder first.")
-                        
+
             elif len(values["-FOLDER-"]) != 0:
-                
+
                 if ids is not None:
                     # graph.delete_figure(ids) ## delete the figure on the canvas if displaying a new one
                     graph.erase()
-                    
+
                 image, pil_image, filename, ids = func.disp_image(window, values, fnames, location=0)
                 first_pmt = None ## to allow autolabeling again
                 window.refresh()
                 window["-COL-"].contents_changed()
-                
+
                 try:
                     ## Tries to overlay points if the image has associated coordinate file
                     pts_dir = os.path.join(os.path.dirname(values["-FOLDER-"]), 'points')
                     pts_file = os.path.basename(filename).split('.')[0]
-                    pts_fname = os.path.join(pts_dir, pts_file) + ".txt" 
-    
+                    pts_fname = os.path.join(pts_dir, pts_file) + ".txt"
+
                     df = func.autoload_pts(pts_fname, name, var.mtx)
                     print("Autoloaded the points. The new dataframe: \n", df)
                     Img_ID = df['Img'].iloc[0]
+
                     points = func.draw_pts(graph, df)
-                    print("Drawing the points")
-                    func.erase_labels(graph, labels)             
-                    labels = func.plot_labels(graph, df)
-                    print("Plotting the labels.")
+                    labels = func.reload_plot_labels(graph, df, labels)
+
                 except Exception as e:
                     print(e)
                     print("No associated points file found.")
-   
+
         if event == "-NEXT-" or event == "-PREV-":
-            
+
             if ids is not None:
                 # graph.delete_figure(ids) ## delete the figure on the canvas if displaying a new one
                 graph.erase()
-            
+
             location=1
             if event == "-PREV-":
                 location=-1
@@ -181,26 +181,27 @@ def main():
             first_pmt = None ##to allow autolabeling again
             window.refresh()
             window["-COL-"].contents_changed()
-            
+
             try:
                 pts_file = os.path.basename(filename).split('.')[0]
-                pts_fname = os.path.join(pts_dir, pts_file) + ".txt"             
+                pts_fname = os.path.join(pts_dir, pts_file) + ".txt"
                 df = func.autoload_pts(pts_fname, name)
                 Img_ID = df['Img'].iloc[0]
+
                 points = func.draw_pts(graph, df)
-                func.erase_labels(graph, labels)                
-                labels = func.plot_labels(graph, df)
+                labels = func.reload_plot_labels(graph, df, labels)
+
             except Exception as e:
                 print(e)
                 print("No associated points file found.")
-        
-## =============== Annotation Features ========================            
-            
+
+## =============== Annotation Features ========================
+
         if event in ('-MOVE-', '-MOVEALL-'):
             graph.set_cursor(cursor='cross')
         elif not event.startswith('-GRAPH-'):
-            graph.set_cursor(cursor='left_ptr') 
-        
+            graph.set_cursor(cursor='left_ptr')
+
         if event == "-GRAPH-":
 
             x, y = values["-GRAPH-"]
@@ -215,25 +216,25 @@ def main():
             else:
                 end_pt = x, y
                 for fig in figures[1:]:
-                    end_pt = func.get_marker_center(graph, fig)      
+                    end_pt = func.get_marker_center(graph, fig)
 
             if values['-MOVE-']:
 
                 ## ignoring the background image from the tuple of objects that can be dragged
-                if len(figures)>1: 
+                if len(figures)>1:
                     fig = figures[1]
                     curr_x, curr_y = func.get_marker_center(graph, fig)
-                    
+
                     graph.move_figure(fig, x - curr_x, y - curr_y)  ## start with marker centered on cursor
-                      
+
                     graph.update()
-            
+
             elif (values["-PMT_POINT-"] or values["-BOLT_POINT-"]) and not made_point:
-                
+
                 try:
                     ## drawing PMT point
-                    if values["-PMT_POINT-"]:                    
-                        pmt_id = sg.popup_get_text('Please enter PMT ID', title="Adding PMT")
+                    if values["-PMT_POINT-"]:
+                        pmt_id = sg.popup_get_text('Please enter PMT ID #####', title="Adding PMT")
                         if pmt_id:
                             df = func.make_pmt(df, pmt_id, x, y, name)
                             graph.draw_point((x,y), color = 'red', size=8)
@@ -242,10 +243,12 @@ def main():
                     elif values["-BOLT_POINT-"]:
 
                         ## checks which pmt the bolt belongs to and returns ID of the PMT
-                        ## along with the angle between the dynode and the bolt    
+                        ## along with the angle between the dynode and the bolt
                             df = func.make_bolt(df, x, y, name)
                             graph.draw_point((x,y), color = 'yellow', size=6)
-                    
+
+                    labels = func.reload_plot_labels(graph, df, labels)
+
                     window["-INFO-"].update(value=f'Made point {df["ID"].iloc[-1]} at ({x}, {y})')
                     made_point = True
 
@@ -256,25 +259,40 @@ def main():
     ## ================= AUTO LABELING ===============================
 
         elif event.endswith('+UP'):
-            
+
             made_point = False
-            
+
             if values['-MOVE-']:
-                
+
                 try:
                     df_feature = func.move_feature(df, start_pt, end_pt, name)
                     window["-INFO-"].update(value=f"Moved point {df_feature['ID'].iloc[0]} from {start_pt} to {end_pt}")
 
                 except Exception as e:
                     print(e)
-                    
+
             elif values['-ERASE-']:
                 try:
                     if len(figures)>1:
-                        graph.delete_figure(fig)
-                        df_erased_feature = func.del_point(df, start_pt)
 
-                        window["-INFO-"].update(value=f"Erased point {df_erased_feature['ID'].iloc[0]}")
+                        # ask user if they're sure that they want to delete the point in question
+                        if sg.popup_yes_no('Are you sure you want to delete this point?', title="Deleting Point") == 'Yes':
+
+                            graph.delete_figure(fig)
+                            df_erased_feature, df_erased_bolts = func.del_point(df, start_pt)
+
+                            # delete the bolts from df_erased_bolts from the graph
+                            if df_erased_bolts is not None:
+                                for index, row in df_erased_bolts.iterrows():
+                                    # find the bolts in the graph
+                                    for fig in graph.get_figures_at_location((row['X'], row['Y']))[1:]:
+                                        graph.delete_figure(fig)
+                                        break
+
+                            window["-INFO-"].update(value=f"Erased point {df_erased_feature['ID'].iloc[0]}")
+
+                        elif sg.popup_yes_no('Are you sure you want to delete this point?', title="Deleting Point") == 'No':
+                            pass
 
                 except Exception as e:
                     print(e)
@@ -285,9 +303,9 @@ def main():
                     id_new = None
                     id_new = sg.popup_get_text('Please enter new ID (#####-## format)', title="Modifying Label")
                     if id_new:
-                        df_modded_feature = func.modify_label(df, start_pt, id_new)
+                        df_modded_feature = func.modify_label(df, start_pt, id_new, name)
                         # Print the ID of the updated dataframe and the ID of the original dataframe
-                        
+
                         window["-INFO-"].update(value=f"Updated ID from {df_modded_feature['ID'].iloc[0]} to index {df.loc[df_modded_feature.index, 'ID']}")
 
                 except Exception as e:
@@ -297,7 +315,6 @@ def main():
             elif values["-LABELING-"]:
 
                 if first_pmt == None:
-                    # sg.popup_ok(("You selected your first PMT."))
 
                     try:
                         # get figure at location
@@ -309,17 +326,20 @@ def main():
                         curr_pos = (curr_x, curr_y)
                         df_feature = func.get_current_feature(df, curr_pos)
                         first_pmt = df_feature['ID'].iloc[0]
+                        print("ID and coordinates of selected PMT: ", first_pmt, curr_pos)
 
                         # insert column with name 'Labels' at the end of the dataframe
                         df.insert(len(df.columns), 'Labels', None)
+                        print("Made new column in dataframe.")
 
                         # get the index of the first pmt and get user input for this PMT's label. Put input into df['Labels'] column at index
                         index = df[df['ID'] == first_pmt].index[0]
-                        label = int(sg.popup_get_text('Please enter label', title="Adding Label"))
+                        label = int(sg.popup_get_text('Please enter label #####', title="Adding Label"))
                         df.at[index, 'Labels'] = label
+                        print("Inserted label into dataframe.")
 
                         # finds PMT in dataframe and the other PMTs in the same row and column. Labels the row and column PMTs.
-                        df, new_ref, row1, column1 = func.autolabel(df, first_pmt, label)
+                        df, new_ref, lesser_x_row, greater_x_row, lesser_y_col, greater_y_col, row1, column1 = func.autolabel(df, first_pmt, label)
 
                         col_len = len(column1)
                         row_len = len(row1)
@@ -330,15 +350,25 @@ def main():
                                 new_ref, new_label = func.get_next_ref(df, count, column1)
 
                                 # autolabeling PMTs in the same row as new_ref
-                                df, new_ref, row, column = func.autolabel(df, new_ref, new_label)
+                                df, new_ref, lesser_x_row, greater_x_row, lesser_y_col, greater_y_col, row, column = func.autolabel(df, new_ref, new_label)
 
                             if count < row_len:
                                 new_ref2, new_label2 = func.get_next_ref(df, count, row1)
 
                                 # autolabeling PMTs in the same column as new_ref2
-                                df, new_ref2, row, column = func.autolabel(df, new_ref2, new_label2)
+                                df, new_ref2, lesser_x_row2, greater_x_row2, lesser_y_col2, greater_y_col2, row2, column2 = func.autolabel(df, new_ref2, new_label2)
 
                             count += 1
+
+                        # make a list of PMT IDs with labels = None
+                        print("Now looking for unlabeled PMTs.")
+                        df_unlabeled = func.get_unlabeled(df) ## returns a list of unlabeled PMTs
+                        print("Unlabeled PMTs: ", df_unlabeled)
+                        print(type(df_unlabeled))
+
+                        # pass each PMT from the df_unlabeled list through the finish_labels function
+                        for i in range(len(df_unlabeled)):
+                            df = func.finish_labels(df, df_unlabeled[i])
 
                         print("Final dataframe with all labels. ", df.to_string())
 
@@ -346,15 +376,12 @@ def main():
                         # final dataframe
                         df = func.finalize_df(df)
 
-                        window["-INFO-"].update(value=f'Auto labeled PMTs')
+                        window["-INFO-"].update(value=f'Autolabeled PMTs')
 
                         first_pmt = None  ## to allow autolabeling again
 
                         window.refresh()
                         window["-COL-"].contents_changed()
-
-                        # unselect 'Autolabel' radio button allow autolabeling again
-                        window['-LABELING-'].update(value=False, visible=True)
 
 
                     except Exception as e:
@@ -362,9 +389,10 @@ def main():
                         print("Auto labeling failed. Please select 'Autolabel' again.")
                         window["-INFO-"].update(value=f'Failed to auto label PMTs')
 
-            func.erase_labels(graph, labels)
-            labels = func.plot_labels(graph, df)
+            labels = func.reload_plot_labels(graph, df, labels)
 
+            # unselect 'Autolabel' radio button allow autolabeling again
+            window['-LABELING-'].update(value=False, visible=True)
             dragging = False
 
         elif event.endswith('+MOTION+'):
@@ -380,11 +408,10 @@ def main():
             df = func.overlay_pts(overlay_file)
             print("Overlay dataframe", df)
             Img_ID = df['Img'].iloc[0]
+
             points = func.draw_pts(graph, df)
-            print("Drawing points")
-            func.erase_labels(graph, labels)                
-            labels = func.plot_labels(graph, df)
-            print("Plotting labels")
+
+            labels = func.reload_plot_labels(graph, df, labels)
 
 ## ======================== Menubar functions =======================================        
         
@@ -398,15 +425,14 @@ def main():
             func.erase_labels(graph, labels)                
             labels = func.plot_labels(graph, df)            
         
-        elif event == '-SAVE-': ## saves annotated image and objects
-            dir_name = os.path.dirname(filename)
-            base = os.path.basename(filename)
-            annotate_fname = os.path.join(str(dir_name), "annotated_"+str(base))
+        # elif event == '-SAVE-': ## saves annotated image and objects
+        #     dir_name = os.path.dirname(filename)
+        #     base = os.path.basename(filename)
+        #     annotate_fname = os.path.join(str(dir_name), "annotated_"+str(base))
             # func.save_element_as_file(column, annotate_fname)
             
         elif event == '-PLOT_LABEL-':
-            func.erase_labels(graph, labels)                
-            labels = func.plot_labels(graph, df)
+            labels = func.reload_plot_labels(graph, df, labels)
             
         elif event == '-ERASE_LABEL-':
             func.erase_labels(graph, labels)
@@ -467,5 +493,4 @@ def main():
 
 main()
 
-#%%
 
