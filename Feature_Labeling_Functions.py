@@ -111,13 +111,6 @@ def make_main_window():
 
     return window
 
-# def make_win2(filename):
-#
-#     layout=[[sg.Image(filename, expand_x=True, expand_y=True)]]
-#     img_win = sg.Window('Full Image', layout, size=(1000, 1000), finalize=True)
-#
-#     return img_win
-
 ## Converting a single JPG to PNG
 def jpg_to_png(jpg_path):
     """ This function can be called to convert .jpg images to .png format.
@@ -512,7 +505,6 @@ def safe_open_w(path):
 def reverseEnum(data: list):
     for i in range(len(data) - 1, -1, -1):
         yield i, data[i]
-
 
 def duplicate_check(df):
 

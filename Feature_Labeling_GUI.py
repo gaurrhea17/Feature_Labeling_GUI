@@ -33,9 +33,7 @@ faulthandler.enable()
 def main():
 
     window = func.make_main_window()
-
     location = 0
-
     graph = window["-GRAPH-"]
 
     name = None
