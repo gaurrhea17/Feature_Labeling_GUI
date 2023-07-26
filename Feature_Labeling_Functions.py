@@ -36,6 +36,87 @@ import Feature_Labeling_Diagnostic_Plot as diag_plt
 
 img_types = (".png", ".jpg", ".PNG", ".JPG", ".jpeg", ".JPEG")
 
+def make_main_window():
+    # sg.theme_previewer() ## Use to see all the colour themes available
+    sg.theme('LightPurple')  ## setting window colour scheme
+    # sg.set_options(dpi_awareness=True) ## setting window options
+
+    ## Top menubar options
+    menu_butts = [['File', ['New', 'Open', 'Save', 'Exit', ]],
+                  ['Edit', ['Copy', '&Undo point', 'Resize Image', 'Change Canvas Size'], ], ['Help', 'About...'], ]
+    menubar = [[sg.Menu(menu_butts)], ]
+
+    ## Window column 1: list of files in chosen folder
+
+    file_list_col = [
+        [
+            sg.Text("Image folder"),
+            sg.In(size=(15, 1), enable_events=True, key="-FOLDER-"),
+            sg.FolderBrowse(),
+        ],
+        [sg.Listbox(values=[], enable_events=True, size=(25, 20), key="-FILE LIST-")
+         ],  ## displays a list of paths to the images you can choose from to display
+    ]
+
+    mov_col = [[sg.T('Choose what you want to do:', enable_events=True)],
+               [sg.R('Draw PMT points', 1, key='-PMT_POINT-', enable_events=True)],
+               [sg.R('Draw bolt points', 1, key='-BOLT_POINT-', enable_events=True)],
+               [sg.R('Erase item', 1, key='-ERASE-', enable_events=True)],
+               [sg.R('Modify label', 1, key='-MODIFY-', enable_events=True)],
+               # [sg.R('Erase all', 1, key='-CLEAR-', enable_events=True)],
+               # [sg.R('Send to back', 1, key='-BACK-', enable_events=True)],
+               # [sg.R('Bring to front', 1, key='-FRONT-', enable_events=True)],
+               # [sg.R('Move Everything', 1, key='-MOVEALL-', enable_events=True)],
+               [sg.R('Move Stuff', 1, key='-MOVE-', enable_events=True)],
+               [sg.R("Auto-label", 1, key='-LABELING-', enable_events=True)],
+               [sg.R('Cursor Position (Click & Hold)', 1, key='-SCAN_POSITION-', enable_events=True)],
+               ]
+
+    column = [[sg.Graph(canvas_size=(var.width, var.height), graph_bottom_left=(0, 0),
+                        graph_top_right=(var.width, var.height),
+                        key="-GRAPH-",  ## can include "change_submits = True"
+                        background_color='white', expand_x=True, expand_y=True, enable_events=True, drag_submits=True,
+                        right_click_menu=[[], ['Erase Item', ]])]]
+
+    image_viewer_col_2 = [
+        [sg.Text("Choose an image from list on the left: ")],
+        [sg.Text(size=(40, 1), key="-TOUT-")],
+        [sg.Column(column, size=(var.column_width, var.column_height), scrollable=True, key="-COL-")],
+        [sg.Text(key="-INFO-", size=(90, 1))],
+    ]
+
+    post_process_col = [
+        [sg.Column(mov_col)],
+        # [sg.Button("Save Annotations", size = (15,1), key="-SAVE-")], ## was supposed to save image with points drawn on it that could be loaded into GUI
+        [sg.Button("Plot Labels", size=(15, 1), key="-PLOT_LABEL-"),
+         sg.Button("Remove Labels", size=(18, 1), key="-ERASE_LABEL-")],
+        [sg.Button("Write CSV", size=(15, 1), key="-CSV-")],
+        # [sg.Button("Reconstruct", size=(15,1), key="-RECON-")], # was supposed to open panel to perform real-time reconstruction
+        [sg.Button('Autolabel', size=(15, 1), key='-AUTO_LABEL-')],
+        # [sg.Button('Zoom In'), sg.Button('Zoom Out')],
+        # [sg.Button("Shift R"), sg.Button("Shift L")], # was supposed to shift image left or right
+        [
+            sg.Text("Choose a file of overlay points: "),
+            sg.In(size=(18, 1), enable_events=True, key="-OVERLAY-"),
+            sg.FileBrowse()],
+    ]
+
+    # ------ Full Window Layout
+    layout = [
+        [menubar, sg.Column(file_list_col), sg.VSeperator(), sg.Column(image_viewer_col_2), sg.VSeperator(),
+         sg.Column(post_process_col),
+         [sg.Button("Prev", size=(10, 1), key="-PREV-"), sg.Button("Next", size=(10, 1), key="-NEXT-")], ]]
+
+    window = sg.Window("Image Labeling GUI", layout, resizable=True)  ## putting together the user interface
+
+    return window
+
+# def make_win2(filename):
+#
+#     layout=[[sg.Image(filename, expand_x=True, expand_y=True)]]
+#     img_win = sg.Window('Full Image', layout, size=(1000, 1000), finalize=True)
+#
+#     return img_win
 
 ## Converting a single JPG to PNG
 def jpg_to_png(jpg_path):
@@ -319,11 +400,21 @@ def autoload_pts(fname, name, mtx):
     return df
 
 
-def overlay_pts(fname):
-    ## Read space delimited point file into dataframe
-    df = pd.read_csv(fname, delim_whitespace=True,
-                     names=["Img", "ID", "X", "Y", "Undistort_X", "Undistort_Y", "Name", "R", "theta"])
-    return df
+def make_win2(df, filename, scale=1):
+    image = cv.imread(filename)
+    cv.namedWindow('Full Image', cv.WINDOW_NORMAL)
+
+    # draw points from df onto image. If point is a PMT, 'ID' in df ends with '00', make it red. Otherwise, make it yellow
+    # adding the associated labels
+    for index, row in df.iterrows():
+        if row['ID'].endswith('00'):
+            cv.circle(image, (int(row[2])*scale, 2750-int(row[3])*scale), 6, (0, 0, 255), -1)
+            cv.putText(image, row['ID'][:-3], (int(row[2])*scale, 2750-int(row[3])*scale-10), cv.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 2)
+        else:
+            cv.circle(image, (int(row[2])*scale, 2750-int(row[3])*scale), 5, (0, 255, 255), -1)
+            cv.putText(image, row['ID'][-2:], (int(row[2])*scale, 2750-int(row[3])*scale-10), cv.FONT_HERSHEY_PLAIN, 1, (0, 255, 255), 2)
+
+    cv.imshow('Full Image', image)
 
 def get_current_feature(df, position):
     # finds clicked point in dataframe and matches ID to feature

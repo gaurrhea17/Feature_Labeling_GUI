@@ -26,78 +26,11 @@ import Feature_Labeling_Variables as var
 
 # %% Defining window objects and layout
 
-# sg.theme_previewer() ## Use to see all the colour themes available
-sg.theme('LightPurple') ## setting window colour scheme
-# sg.set_options(dpi_awareness=True) ## setting window options
-
-## Top menubar options
-menu_butts = [['File', ['New', 'Open', 'Save', 'Exit', ]], ['Edit', ['Copy', '&Undo point', 'Resize Image', 'Change Canvas Size'], ],  ['Help', 'About...'], ]
-menubar = [[sg.Menu(menu_butts)],]
-
-## Window column 1: list of files in chosen folder
-
-file_list_col = [
-    [
-     sg.Text("Image folder"),
-     sg.In(size=(15,1), enable_events =True, key="-FOLDER-"),
-     sg.FolderBrowse(),
-     ],
-    [sg.Listbox(values=[], enable_events=True, size=(25,20), key="-FILE LIST-")
-     ], ## displays a list of paths to the images you can choose from to display
-    ]
-
-mov_col = [[sg.T('Choose what you want to do:', enable_events=True)],
-           [sg.R('Draw PMT points', 1,  key='-PMT_POINT-', enable_events=True)],
-           [sg.R('Draw bolt points', 1,  key='-BOLT_POINT-', enable_events=True)],
-           [sg.R('Erase item', 1, key='-ERASE-', enable_events=True)],
-           [sg.R('Modify label', 1, key='-MODIFY-', enable_events=True)],
-           # [sg.R('Erase all', 1, key='-CLEAR-', enable_events=True)],
-           # [sg.R('Send to back', 1, key='-BACK-', enable_events=True)],
-           # [sg.R('Bring to front', 1, key='-FRONT-', enable_events=True)],
-           # [sg.R('Move Everything', 1, key='-MOVEALL-', enable_events=True)],
-           [sg.R('Move Stuff', 1, key='-MOVE-', enable_events=True)],
-           [sg.R("Auto-label", 1, key='-LABELING-', enable_events=True)],
-           [sg.R('Cursor Position (Click & Hold)', 1,  key='-SCAN_POSITION-', enable_events=True)],
-           ]
-
-column = [[sg.Graph(canvas_size = (var.width, var.height), graph_bottom_left = (0,0), graph_top_right = (var.width,var.height),
-key = "-GRAPH-", ## can include "change_submits = True"
-background_color = 'white', expand_x =True, expand_y = True, enable_events = True, drag_submits = True, right_click_menu=[[],['Erase Item',]])]]
-
-image_viewer_col_2 = [
-    [sg.Text("Choose an image from list on the left: ")],
-    [sg.Text(size=(40,1), key="-TOUT-")],
-    [sg.Column(column, size=(var.column_width, var.column_height), scrollable = True, key = "-COL-")],
-    [sg.Text(key="-INFO-", size=(90,1))],
-    ]
-
-post_process_col= [
-    [sg.Column(mov_col)],
-    # [sg.Button("Save Annotations", size = (15,1), key="-SAVE-")], ## was supposed to save image with points drawn on it that could be loaded into GUI
-    [sg.Button("Plot Labels", size = (15,1), key="-PLOT_LABEL-"), sg.Button("Remove Labels", size = (18,1), key="-ERASE_LABEL-")],
-    [sg.Button("Write CSV", size = (15,1), key="-CSV-")],
-    # [sg.Button("Reconstruct", size=(15,1), key="-RECON-")], # was supposed to open panel to perform real-time reconstruction
-    [sg.Button('Autolabel', size =(15,1), key='-AUTO_LABEL-')],
-    # [sg.Button('Zoom In'), sg.Button('Zoom Out')],
-    # [sg.Button("Shift R"), sg.Button("Shift L")], # was supposed to shift image left or right
-    [
-     sg.Text("Choose a file of overlay points: "),
-     sg.In(size=(18,1), enable_events =True, key="-OVERLAY-"),
-     sg.FileBrowse()],
-     ]
-
-
 
 ## Main function
 def main():
 
-    # ------ Full Window Layout
-    layout= [
-        [menubar, sg.Column(file_list_col), sg.VSeperator(), sg.Column(image_viewer_col_2), sg.VSeperator(), sg.Column(post_process_col),
-         [sg.Button("Prev", size=(10,1), key="-PREV-"), sg.Button("Next", size=(10,1), key="-NEXT-")],]]
-
-    window = sg.Window("Image Labeling GUI", layout, resizable=True) ## putting together the user interface
-
+    window = func.make_main_window()
 
     location = 0
 
@@ -119,6 +52,7 @@ def main():
     labels = []
 
     while True:
+
         event, values = window.read()
         ## 'event' is the key string of whichever element user interacts with
         ## 'values' contains Python dictionary that maps element key to a value
@@ -142,6 +76,7 @@ def main():
                     graph.erase()
 
                 image, pil_image, filename, ids = func.disp_image(window, values, fnames, location=0)
+
                 first_pmt = None ## to allow autolabeling again
                 window.refresh()
                 window["-COL-"].contents_changed()
@@ -153,10 +88,14 @@ def main():
                     pts_fname = os.path.join(pts_dir, pts_file) + ".txt"
 
                     df = func.autoload_pts(pts_fname, name, var.mtx)
+
                     print("Autoloaded the points. The new dataframe: \n", df)
                     Img_ID = df['Img'].iloc[0]
                     func.draw_pts(graph, df)
                     labels = func.reload_plot_labels(graph, df, labels)
+
+                    # show full image in second window
+                    window2 = func.make_win2(df, filename)
 
                 except Exception as e:
                     print(e)
@@ -180,10 +119,13 @@ def main():
             try:
                 pts_file = os.path.basename(filename).split('.')[0]
                 pts_fname = os.path.join(pts_dir, pts_file) + ".txt"
-                df = func.autoload_pts(pts_fname, name)
+                df = func.autoload_pts(pts_fname, name, var.mtx)
                 Img_ID = df['Img'].iloc[0]
                 func.draw_pts(graph, df)
                 labels = func.reload_plot_labels(graph, df, labels)
+
+                # show full image in second window
+                window2 = func.make_win2(df, filename)
             except Exception as e:
                 print(e)
                 print("No associated points file found.")
@@ -352,16 +294,6 @@ def main():
                                 df, new_ref2, lesser_x_row2, greater_x_row2, lesser_y_col2, greater_y_col2, row2, column2 = func.autolabel(df, new_ref2, new_label2)
 
                             count += 1
-
-                        # make a list of PMT IDs with labels = None
-                        print("Now looking for unlabeled PMTs.")
-                        df_unlabeled = func.get_unlabeled(df) ## returns a list of unlabeled PMTs
-                        print("Unlabeled PMTs: ", df_unlabeled)
-                        print(type(df_unlabeled))
-
-                        # pass each PMT from the df_unlabeled list through the finish_labels function
-                        for i in range(len(df_unlabeled)):
-                            df = func.finish_labels(df, df_unlabeled[i])
 
                         print("Final dataframe with all labels. ", df.to_string())
 

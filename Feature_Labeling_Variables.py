@@ -11,8 +11,8 @@ both the functions and GUI modules for the feature labeling GUI.
 import numpy as np
 
 width, height = 4000, 2750 ## sizes of images
-column_width = 1000
-column_height = 750
+column_width = 1250
+column_height = 900
 invert_y = True
 NBOLTS = 24
 

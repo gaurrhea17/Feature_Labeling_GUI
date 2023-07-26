@@ -53,11 +53,13 @@ def make_window(x, y, labels):
     layout = [[sg.Text('Diagnostic Plot')],
               [sg.Canvas(key='-CANVAS-')],
               [sg.Button('Ok')]]
-    window = sg.Window('Diagnostics Plot', layout, finalize=True, resizable=True, element_justification='center',
+    window2 = sg.Window('Diagnostics Plot', layout, finalize=True, resizable=True, element_justification='center',
                        font='Helvetica 18')
 
     # add the plot to the window
     fig, ax = figure(x, y, labels)
-    tkcanvas = draw_figure(window['-CANVAS-'].TKCanvas, fig)
-    event, values = window.read()
-    window.close()
+    tkcanvas = draw_figure(window2['-CANVAS-'].TKCanvas, fig)
+    event2, values2 = window2.read()
+
+    if event2 == 'Ok' or event2 == sg.WIN_CLOSED:
+        window2.close()
