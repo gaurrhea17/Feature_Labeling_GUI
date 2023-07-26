@@ -23,6 +23,8 @@ import cv2 as cv
 import Feature_Labeling_Functions as func
 import Feature_Labeling_Variables as var
 
+import faulthandler
+faulthandler.enable()
 
 # %% Defining window objects and layout
 
@@ -50,6 +52,7 @@ def main():
     pts_dir = None
     df = None
     labels = []
+    points = []
 
     while True:
 
@@ -91,7 +94,8 @@ def main():
 
                     print("Autoloaded the points. The new dataframe: \n", df)
                     Img_ID = df['Img'].iloc[0]
-                    func.draw_pts(graph, df)
+
+                    points = func.draw_pts(graph, df)
                     labels = func.reload_plot_labels(graph, df, labels)
 
                     # show full image in second window
@@ -121,11 +125,13 @@ def main():
                 pts_fname = os.path.join(pts_dir, pts_file) + ".txt"
                 df = func.autoload_pts(pts_fname, name, var.mtx)
                 Img_ID = df['Img'].iloc[0]
-                func.draw_pts(graph, df)
+
+                points = func.draw_pts(graph, df)
                 labels = func.reload_plot_labels(graph, df, labels)
 
                 # show full image in second window
                 window2 = func.make_win2(df, filename)
+
             except Exception as e:
                 print(e)
                 print("No associated points file found.")
@@ -334,16 +340,23 @@ def main():
             df = func.overlay_pts(overlay_file)
             print("Overlay dataframe", df)
             Img_ID = df['Img'].iloc[0]
-            func.draw_pts(graph, df)
+
+            points = func.draw_pts(graph, df)
 
             labels = func.reload_plot_labels(graph, df, labels)
-
 
 ## ======================== Menubar functions =======================================        
         
         elif event == 'Copy':
             func.copy(window)
-        
+
+        elif event == '-FILL_BOLTS-':
+            df = func.fill_bolts(df, name)
+            func.erase_pts(graph, points)
+            points = func.draw_pts(graph, df)
+            func.erase_labels(graph, labels)
+            labels = func.plot_labels(graph, df)
+
         # elif event == '-SAVE-': ## saves annotated image and objects
         #     dir_name = os.path.dirname(filename)
         #     base = os.path.basename(filename)
@@ -405,10 +418,11 @@ def main():
                 
             # except:
             #     sg.popup_ok("Please check your size input format. E.g. ##, ##")
-        
+
+
     window.refresh() ## refreshing the GUI to prevent it from hanging
     window.close() ## For when the user presses the Exit button
-    
+
 main()
 
 
