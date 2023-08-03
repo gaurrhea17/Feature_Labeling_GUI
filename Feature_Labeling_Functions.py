@@ -87,6 +87,7 @@ def make_main_window():
 
     post_process_col = [
         [sg.Column(mov_col)],
+        [sg.Button('Fill Bolts', size =(15,1), key='-FILL_BOLTS-')],
         # [sg.Button("Save Annotations", size = (15,1), key="-SAVE-")], ## was supposed to save image with points drawn on it that could be loaded into GUI
         [sg.Button("Plot Labels", size=(15, 1), key="-PLOT_LABEL-"),
          sg.Button("Remove Labels", size=(18, 1), key="-ERASE_LABEL-")],
