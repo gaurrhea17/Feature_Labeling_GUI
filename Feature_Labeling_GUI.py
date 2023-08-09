@@ -2,7 +2,7 @@
 """
 Created on Wed Mar 15 14:24:03 2023
 
-@author: gaurr
+@author: gaurr091
 """
 
 ## Importing necessary packages
@@ -28,8 +28,7 @@ faulthandler.enable()
 
 # %% Defining window objects and layout
 
-
-## Main function
+## Main functiong
 def main():
 
     window = func.make_main_window()
@@ -38,7 +37,11 @@ def main():
 
     name = None
     while name is None:
-        name = sg.popup_get_text('Please enter your initials', title="Name initials")
+        # Prompt user for initials. If user clicks "Cancel", exit the program
+        name = sg.popup_get_text('Please enter your initials:', 'Initials', default_text='')
+        if name is None:
+            sys.exit()
+
 
     Img_ID = None
 
@@ -49,6 +52,7 @@ def main():
     first_pmt = None
     pts_dir = None
     df = None
+
     labels = []
     points = []
 
@@ -58,8 +62,8 @@ def main():
         ## 'event' is the key string of whichever element user interacts with
         ## 'values' contains Python dictionary that maps element key to a value
 
-        if event == "Exit" or event == sg.WIN_CLOSED: ## end loop if user clicks "Exit" or closes window
-            break;
+        if event == 'Exit' or event == sg.WIN_CLOSED: ## end loop if user clicks "Exit" or closes window
+            break
 
         # Folder name filled in, we'll now make a list of files in the folder
         if event == "-FOLDER-": ## checking if the user has chosen a folder
@@ -189,6 +193,12 @@ def main():
                     labels = func.reload_plot_labels(graph, df, labels)
 
                     window["-INFO-"].update(value=f'Made point {df["ID"].iloc[-1]} at ({x}, {y})')
+
+                    # saving the dataframe after a point has been made
+                    output_filepath_txt = func.create_annotation_file(values, filename)
+                    func.write_coords_to_file(df, output_filepath_txt)
+
+                    window2 = func.make_win2(df, filename)
                     made_point = True
 
                 except Exception as e:
@@ -206,6 +216,11 @@ def main():
                 try:
                     df_feature = func.move_feature(df, start_pt, end_pt, name)
                     window["-INFO-"].update(value=f"Moved point {df_feature['ID'].iloc[0]} from {start_pt} to {end_pt}")
+                    window2 = func.make_win2(df, filename)
+
+                    # saving the dataframe after a move has been made
+                    output_filepath_txt = func.create_annotation_file(values, filename)
+                    func.write_coords_to_file(df, output_filepath_txt)
 
                 except Exception as e:
                     print(e)
@@ -229,6 +244,7 @@ def main():
                                         break
 
                             window["-INFO-"].update(value=f"Erased point {df_erased_feature['ID'].iloc[0]}")
+                            window2 = func.make_win2(df, filename)
 
                         elif sg.popup_yes_no('Are you sure you want to delete this point?', title="Deleting Point") == 'No':
                             pass
@@ -246,6 +262,11 @@ def main():
                         # Print the ID of the updated dataframe and the ID of the original dataframe
 
                         window["-INFO-"].update(value=f"Updated ID from {df_modded_feature['ID'].iloc[0]} to index {df.loc[df_modded_feature.index, 'ID']}")
+                        window2 = func.make_win2(df, filename)
+
+                        # saving the dataframe after a modification has been made
+                        output_filepath_txt = func.create_annotation_file(values, filename)
+                        func.write_coords_to_file(df, output_filepath_txt)
 
                 except Exception as e:
                     print(e)
@@ -355,11 +376,8 @@ def main():
             func.erase_labels(graph, labels)
             labels = func.plot_labels(graph, df)
 
-        # elif event == '-SAVE-': ## saves annotated image and objects
-        #     dir_name = os.path.dirname(filename)
-        #     base = os.path.basename(filename)
-        #     annotate_fname = os.path.join(str(dir_name), "annotated_"+str(base))
-            # func.save_element_as_file(column, annotate_fname)
+        elif event == '-SAVE_IMAGE-': ## save the image with the points and labels
+            output_filepath = func.save_image(values, window2, filename)
             
         elif event == '-PLOT_LABEL-':
             labels = func.reload_plot_labels(graph, df, labels)
@@ -368,16 +386,9 @@ def main():
             func.erase_labels(graph, labels)
         
         elif event == '-CSV-':
-            folder = os.path.join(os.path.dirname(values["-FOLDER-"]),'Annotation_Coordinates')
+            output_filepath_txt = func.create_annotation_file(values, filename)
 
-            # Make folder if it doesn't exist
-            if not os.path.exists(folder):
-                os.makedirs(folder)
-
-            output_filepath_txt = os.path.join(folder, os.path.basename(os.path.splitext(filename)[0])+".txt")
-            
             try:
-                
                 func.write_coords_to_file(df, output_filepath_txt)
                 
             except Exception as e:
@@ -410,10 +421,10 @@ def main():
             im_array = np.array(image, dtype=np.uint8)
             data = func.resize(window, im_array, scale)
             func.change_canvas_size(window, graph, scale)
-            graph.draw_image(data=data, location=(0,var.height))
+            graph.draw_image(data=data, location=(0, var.height))
             func.draw_pts(graph, df, scale=scale)
             
-                
+
             # except:
             #     sg.popup_ok("Please check your size input format. E.g. ##, ##")
 
@@ -422,5 +433,3 @@ def main():
     window.close() ## For when the user presses the Exit button
 
 main()
-
-
