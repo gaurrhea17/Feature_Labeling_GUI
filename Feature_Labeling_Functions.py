@@ -100,7 +100,6 @@ def make_main_window():
             sg.In(size=(18, 1), enable_events=True, key="-OVERLAY-"),
             sg.FileBrowse()],
     ]
-
     # ------ Full Window Layout
     layout = [
         [menubar, sg.Column(file_list_col), sg.VSeperator(), sg.Column(image_viewer_col_2), sg.VSeperator(),

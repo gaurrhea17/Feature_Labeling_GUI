@@ -42,7 +42,6 @@ def main():
         if name is None:
             sys.exit()
 
-
     Img_ID = None
 
     dragging = False
