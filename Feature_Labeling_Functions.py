@@ -22,8 +22,6 @@ import pandas as pd
 import os.path
 import PySimpleGUI as sg
 import matplotlib
-# %matplotlib tk ## will work as a command if file as .ipy extension
-# export MPLBACKEND = TKAgg
 import matplotlib.pyplot as plt
 import cv2 as cv
 
@@ -89,11 +87,13 @@ def make_main_window():
         [sg.Column(mov_col)],
         [sg.Button('Fill Bolts', size =(15,1), key='-FILL_BOLTS-')],
         # [sg.Button("Save Annotations", size = (15,1), key="-SAVE-")], ## was supposed to save image with points drawn on it that could be loaded into GUI
+        # [sg.Button('Fill Bolts', size=(15, 1), key='-FILL_BOLTS-')],
         [sg.Button("Plot Labels", size=(15, 1), key="-PLOT_LABEL-"),
          sg.Button("Remove Labels", size=(18, 1), key="-ERASE_LABEL-")],
         [sg.Button("Write CSV", size=(15, 1), key="-CSV-")],
+        # [sg.Button("Save Image", size=(15, 1), key="-SAVE_IMAGE-")],
         # [sg.Button("Reconstruct", size=(15,1), key="-RECON-")], # was supposed to open panel to perform real-time reconstruction
-        [sg.Button('Autolabel', size=(15, 1), key='-AUTO_LABEL-')],
+        # [sg.Button('Autolabel', size=(15, 1), key='-AUTO_LABEL-')],
         # [sg.Button('Zoom In'), sg.Button('Zoom Out')],
         # [sg.Button("Shift R"), sg.Button("Shift L")], # was supposed to shift image left or right
         [
@@ -101,7 +101,6 @@ def make_main_window():
             sg.In(size=(18, 1), enable_events=True, key="-OVERLAY-"),
             sg.FileBrowse()],
     ]
-
     # ------ Full Window Layout
     layout = [
         [menubar, sg.Column(file_list_col), sg.VSeperator(), sg.Column(image_viewer_col_2), sg.VSeperator(),
@@ -410,12 +409,13 @@ def make_win2(df, filename, scale=1):
     for index, row in df.iterrows():
         if row['ID'].endswith('00'):
             cv.circle(image, (int(row[2])*scale, 2750-int(row[3])*scale), 6, (0, 0, 255), -1)
-            cv.putText(image, row['ID'][:-3], (int(row[2])*scale, 2750-int(row[3])*scale-10), cv.FONT_HERSHEY_PLAIN, 1, (0, 0, 255), 2)
+            cv.putText(image, row['ID'][-5:-3], (int(row[2])*scale, 2750-int(row[3])*scale-10), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
         else:
             cv.circle(image, (int(row[2])*scale, 2750-int(row[3])*scale), 5, (0, 255, 255), -1)
-            cv.putText(image, row['ID'][-2:], (int(row[2])*scale, 2750-int(row[3])*scale-10), cv.FONT_HERSHEY_PLAIN, 1, (0, 255, 255), 2)
+            cv.putText(image, row['ID'][-2:], (int(row[2])*scale, 2750-int(row[3])*scale-10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
 
     cv.imshow('Full Image', image)
+    return image
 
 def get_current_feature(df, position):
     # finds clicked point in dataframe and matches ID to feature
@@ -524,6 +524,34 @@ def duplicate_check(df):
 
     return df
 
+def create_annotation_file(values, filename):
+
+    is_saved = True
+    folder = os.path.join(os.path.dirname(values["-FOLDER-"]), 'Annotation_Coordinates')
+
+    # Make folder if it doesn't exist
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+
+    output_filepath_txt = os.path.join(folder, os.path.basename(os.path.splitext(filename)[0]) + ".txt")
+
+    return output_filepath_txt
+
+def save_image(values, window, filename):
+    is_saved = True
+    folder = os.path.join(os.path.dirname(values["-FOLDER-"]), 'Annotation_Images')
+
+    # Make folder if it doesn't exist
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+
+    output_filepath = os.path.join(folder, os.path.basename(os.path.splitext(filename)[0]) + ".png")
+    print("Saving image to: ", output_filepath)
+
+    # save the image from the opencv namedwindow
+    cv.imwrite(output_filepath, window.Element('-IMAGE-').GetImage())
+
+    return output_filepath
 
 def write_coords_to_file(df, filename):
     # df = duplicate_check(df)
@@ -678,7 +706,6 @@ def move_feature(df, start_pt, end_pt, name):
     df.loc[df_feature.index, 'Name'] = name
     
     feature_ID = df_feature['ID'].iloc[0]
-    print("Feature being moved is ", feature_ID)
 
     # If the feature being moved is a PMT
     if str(feature_ID).endswith('00'):
@@ -812,11 +839,11 @@ def autolabel(df, new_ref, label):
     for i in greater_x_row:
         row_label -= 51
 
-        # if df[df['ID'] == i]['Labels'].iloc[0] != None:
-        #     continue
-        #
-        # else:
-        df.at[df[df['ID'] == i].index[0], 'Labels'] = row_label
+        if df[df['ID'] == i]['Labels'].iloc[0] != None:
+            continue
+
+        else:
+            df.at[df[df['ID'] == i].index[0], 'Labels'] = row_label
 
         # copy all entries in the 'ID' column that begin with the same 5 digits as i and don't end with '00' into the 'Labels' column
         # after copying, replace the first 5 digits with the string, row_label
@@ -829,11 +856,11 @@ def autolabel(df, new_ref, label):
     for i in lesser_x_row:
         row_label += 51
 
-        # if df[df['ID'] == i]['Labels'].iloc[0] != None:
-        #     continue
-        #
-        # else:
-        df.at[df[df['ID'] == i].index[0], 'Labels'] = row_label
+        if df[df['ID'] == i]['Labels'].iloc[0] != None:
+            continue
+
+        else:
+            df.at[df[df['ID'] == i].index[0], 'Labels'] = row_label
 
         # copy all entries in the 'ID' column that begin with the same 5 digits as i and don't end with '00' into the 'Labels' column
         # after copying, replace the first 5 digits with the string, row_label
@@ -844,11 +871,11 @@ def autolabel(df, new_ref, label):
     for i in lesser_y_col:
         col_label -= 1
 
-        # if df[df['ID'] == i]['Labels'].iloc[0] != None:
-        #     continue
-        #
-        # else:
-        df.at[df[df['ID'] == i].index[0], 'Labels'] = col_label
+        if df[df['ID'] == i]['Labels'].iloc[0] != None:
+            continue
+
+        else:
+            df.at[df[df['ID'] == i].index[0], 'Labels'] = col_label
 
         # copy all entries in the 'ID' column that begin with the same 5 digits as i and don't end with '00' into the 'Labels' column
         # after copying, replace the first 5 digits with the string, col_label
@@ -860,11 +887,11 @@ def autolabel(df, new_ref, label):
     # assign labels to the PMTs in the same column as the reference PMT, decreasing by 1 each element
     for i in greater_y_col:
         col_label += 1
-        #
-        # if df[df['ID'] == i]['Labels'].iloc[0] != None:
-        #     continue
-        # else:
-        df.at[df[df['ID'] == i].index[0], 'Labels'] = col_label
+
+        if df[df['ID'] == i]['Labels'].iloc[0] != None:
+            continue
+        else:
+            df.at[df[df['ID'] == i].index[0], 'Labels'] = col_label
 
         # copy all entries in the 'ID' column that begin with the same 5 digits as i and don't end with '00' into the 'Labels' column
         # after copying, replace the first 5 digits with the string, col_label
@@ -1058,3 +1085,5 @@ def get_unlabeled(df):
     # return a list of the IDs of the unlabeled PMTs
     return list(unlabeled['ID'])
 
+def confirm_save():
+    return sg.popup_yes_no('Have you saved your work?', title = "Save Before Close")
