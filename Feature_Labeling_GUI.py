@@ -87,9 +87,15 @@ def main():
 
                 try:
                     ## Tries to overlay points if the image has associated coordinate file
-                    pts_dir = os.path.join(os.path.dirname(values["-FOLDER-"]), 'points')
+
+                    pts_dir = os.path.join(os.path.dirname(values["-FOLDER-"]), "Annotation_Coordinates")
+
                     pts_file = os.path.basename(filename).split('.')[0]
                     pts_fname = os.path.join(pts_dir, pts_file) + ".txt"
+
+                    if not os.path.exists(pts_fname):
+                        pts_dir = os.path.join(os.path.dirname(values["-FOLDER-"]), "points")
+                        pts_fname = os.path.join(pts_dir, pts_file) + ".txt"
 
                     df = func.autoload_pts(pts_fname, name, var.mtx)
 
@@ -124,6 +130,10 @@ def main():
             try:
                 pts_file = os.path.basename(filename).split('.')[0]
                 pts_fname = os.path.join(pts_dir, pts_file) + ".txt"
+                if not os.path.exists(pts_fname):
+                    pts_dir = os.path.join(os.path.dirname(values["-FOLDER-"]), "points")
+                    pts_fname = os.path.join(pts_dir, pts_file) + ".txt"
+
                 df = func.autoload_pts(pts_fname, name, var.mtx)
                 Img_ID = df['Img'].iloc[0]
 

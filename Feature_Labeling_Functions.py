@@ -557,6 +557,9 @@ def write_coords_to_file(df, filename):
     # df = duplicate_check(df)
     df = df.sort_values(by=['ID'])
 
+    # flip Y axis back to original scheme
+    df['Y'] = df['Y'].map(lambda Y: var.height - Y)
+
     # Write X/Y column with precision 
     df['X'] = df['X'].map(lambda x: '{:.1f}'.format(x))
     df['Y'] = df['Y'].map(lambda y: '{:.1f}'.format(y))
