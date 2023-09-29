@@ -186,8 +186,12 @@ def main():
                 try:
                     ## drawing PMT point
                     if values["-PMT_POINT-"]:
-                        pmt_id = sg.popup_get_text('Please enter PMT ID #####', title="Adding PMT")
-                        if pmt_id:
+                        pmt_id = sg.popup_get_text('Please enter PMT/LI ID #####', title="Adding PMT/LI")
+                        # if pmt_id starts with 2 or 3 and has 8 characters, then it's a light injector
+                        if pmt_id and (pmt_id.startswith('2') or pmt_id.startswith('3')) and len(pmt_id) == 8:
+                            df = func.make_li(df, pmt_id, x, y, name)
+                            graph.draw_point((x,y), color = 'green', size=8)
+                        elif pmt_id:
                             df = func.make_pmt(df, pmt_id, x, y, name)
                             graph.draw_point((x,y), color = 'red', size=8)
 
@@ -238,7 +242,8 @@ def main():
                 try:
                     if len(figures)>1:
 
-                        # ask user if they're sure that they want to delete the point in question
+                        # ask user if they're sure that they want to delete the point in question. make the popup window appear on top of the main window
+
                         if sg.popup_yes_no('Are you sure you want to delete this point?', title="Deleting Point") == 'Yes':
 
                             graph.delete_figure(fig)
@@ -255,8 +260,12 @@ def main():
                             window["-INFO-"].update(value=f"Erased point {df_erased_feature['ID'].iloc[0]}")
                             window2 = func.make_win2(df, filename)
 
-                        elif sg.popup_yes_no('Are you sure you want to delete this point?', title="Deleting Point") == 'No':
-                            pass
+                            # saving the dataframe after a point has been removed
+                            output_filepath_txt = func.create_annotation_file(values, filename)
+                            func.write_coords_to_file(df, output_filepath_txt)
+
+                        # elif sg.popup_yes_no('Are you sure you want to delete this point?', title="Deleting Point") == 'No':
+                        #     pass
 
                 except Exception as e:
                     print(e)
@@ -403,7 +412,11 @@ def main():
             except Exception as e:
                 print(e)
                 sg.popup_ok("Could not save. Check terminal messages.")
-            
+
+        elif event == '-EDIT_DF-':
+        # open up the dataframe and allow user to edit it
+            func.edit_df(df)
+
         # This doesn't seem to do anything yet
         elif event == '&Undo point':
             

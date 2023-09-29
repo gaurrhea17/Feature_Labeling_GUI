@@ -14,7 +14,7 @@ import json
 import math
 import numpy as np
 import glob
-from PIL import Image, ImageDraw, ImageGrab
+from PIL import Image, ImageDraw, ImageGrab, ImageEnhance
 import io
 import base64
 import csv
@@ -57,7 +57,7 @@ def make_main_window():
     ]
 
     mov_col = [[sg.T('Choose what you want to do:', enable_events=True)],
-               [sg.R('Draw PMT points', 1, key='-PMT_POINT-', enable_events=True)],
+               [sg.R('Draw PMT/LI points', 1, key='-PMT_POINT-', enable_events=True)],
                [sg.R('Draw bolt points', 1, key='-BOLT_POINT-', enable_events=True)],
                [sg.R('Erase item', 1, key='-ERASE-', enable_events=True)],
                [sg.R('Modify label', 1, key='-MODIFY-', enable_events=True)],
@@ -90,6 +90,7 @@ def make_main_window():
         [sg.Button("Plot Labels", size=(15, 1), key="-PLOT_LABEL-"),
          sg.Button("Remove Labels", size=(18, 1), key="-ERASE_LABEL-")],
         [sg.Button("Write CSV", size=(15, 1), key="-CSV-")],
+        [sg.Button("Edit Dataframe", size=(15, 1), key="-EDIT_DF-")],
         # [sg.Button("Save Image", size=(15, 1), key="-SAVE_IMAGE-")],
         # [sg.Button("Reconstruct", size=(15,1), key="-RECON-")], # was supposed to open panel to perform real-time reconstruction
         # [sg.Button('Autolabel', size=(15, 1), key='-AUTO_LABEL-')],
@@ -342,8 +343,11 @@ def draw_pts(graph, df, scale=1):
         draw_coords = (float(row[2]) * scale, float(row[3]) * scale)
         color = 'yellow'
         size = 6
-        if str(row[1]).endswith('00'):  # PMT
+        if str(row[1]).endswith('00') and not str(row[1]).startswith('2') and not str(row[1]).startswith('3'):  # PMT
             color = 'red'
+            size = 8
+        elif str(row[1]).startswith('2') or str(row[1]).startswith('3'): # LI
+            color = 'green'
             size = 8
 
         points.append(graph.draw_point(draw_coords, color=color, size=size))
@@ -371,6 +375,7 @@ def autoload_pts(fname, name, mtx):
     if var.invert_y:
         df['Y'] = df['Y'].map(lambda Y: var.height - Y)
 
+    df = duplicate_check(df)
 
     ## Process all the points
     for index, row in df.iterrows():
@@ -395,7 +400,6 @@ def autoload_pts(fname, name, mtx):
             df.at[index, 'R'] = np.sqrt((float(row[2]) - pmt_x) ** 2 + (float(row[3]) - pmt_y) ** 2)
             df.at[index, 'theta'] = angle_to((float(row[2]), float(row[3])), (pmt_x, pmt_y))
 
-    df = duplicate_check(df)
     return df
 
 
@@ -406,9 +410,12 @@ def make_win2(df, filename, scale=1):
     # draw points from df onto image. If point is a PMT, 'ID' in df ends with '00', make it red. Otherwise, make it yellow
     # adding the associated labels
     for index, row in df.iterrows():
-        if row['ID'].endswith('00'):
+        if row['ID'].endswith('00') and not row['ID'].startswith('2') and not row['ID'].startswith('3'):
             cv.circle(image, (int(row[2])*scale, 2750-int(row[3])*scale), 6, (0, 0, 255), -1)
             cv.putText(image, row['ID'][-5:-3], (int(row[2])*scale, 2750-int(row[3])*scale-10), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        elif row['ID'].startswith('2') or row['ID'].startswith('3'):
+            cv.circle(image, (int(row[2])*scale, 2750-int(row[3])*scale), 6, (0, 255, 0), -1)
+            cv.putText(image, row['ID'][-5:-3], (int(row[2])*scale, 2750-int(row[3])*scale-10), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         else:
             cv.circle(image, (int(row[2])*scale, 2750-int(row[3])*scale), 5, (0, 255, 255), -1)
             cv.putText(image, row['ID'][-2:], (int(row[2])*scale, 2750-int(row[3])*scale-10), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
@@ -575,7 +582,7 @@ def angle_to(p1, p2, rotation=270, clockwise=False):
 
 
 def get_closest_pmt(df, x, y, idx=0):
-    df_pmts = df[df['ID'].apply(lambda feature_id: float(feature_id[-2:]) == 0)]
+    df_pmts = df[df['ID'].apply(lambda feature_id: float(feature_id[-2:]) == 0 and float(feature_id[0]) != 2 and float(feature_id[0]) != 3)]
     df_closest = df_pmts.iloc[((df_pmts['X'] - x) ** 2 + (df_pmts['Y'] - y) ** 2).argsort()[idx:idx+1]]
     pmt_id = df_closest['ID'].iloc[0][:5]
     pmt_x = df_closest['X'].iloc[0]
@@ -661,6 +668,21 @@ def make_bolt(df, bolt_x, bolt_y, name, bolt_label=""):
 
     return df
 
+def make_li(df, pmt_id, pmt_x, pmt_y, name):
+
+        check_existing_id(df, pmt_id)
+
+        df_new_LI = pd.DataFrame(
+            {'Img': df['Img'].iloc[0], 'ID': pmt_id, 'X': pmt_x, 'Y': pmt_y, 'Name': name, 'R': np.nan,
+            'theta': np.nan}, index=[0])
+        df = pd.concat([df, df_new_LI], ignore_index=True)
+
+        # df = df.sort_values(by=['ID'])
+        print("Inserted your new LI", df.tail(1))
+
+        return df
+
+
 
 def make_pmt(df, pmt_id, pmt_x, pmt_y, name):
 
@@ -732,8 +754,15 @@ def plot_labels(graph, df):
 
             draw_x = row[2]
             draw_y = row[3]
-            color = 'red' if bolt_id == '00' else 'yellow'
-            text = pmt_id if bolt_id == '00' else bolt_id
+            if bolt_id == '00' and pmt_id[0] != '2' and pmt_id[0] != '3':
+                color = 'red'
+                text = pmt_id
+            elif pmt_id[0] == '2'or pmt_id[0] == '3':
+                color = 'purple'
+                text = bolt_id
+            else:
+                color = 'yellow'
+                text = bolt_id
 
             labels.append(graph.DrawText(text=text, location=(draw_x - 10, draw_y - 10), color=color))
 
@@ -758,8 +787,8 @@ def get_marker_center(graph, fig):
 
 def calc_row_col(df, new_ref):
 
-    # calculate the vector from the reference PMT, new_ref to every other PMT in the dataframe (ends with '00')
-    df_pmts = df[df['ID'].apply(lambda id: (str(id)[-2:] == '00'))]
+    # calculate the vector from the reference PMT, new_ref to every other PMT in the dataframe (ends with '00' and doesn't start with 2 or 3)
+    df_pmts = df[df['ID'].apply(lambda id: id.endswith('00') and not id.startswith('2') and not id.startswith('3'))]
 
     # get the x and y coordinates of the reference PMT
     x_ref = df[df['ID'] == new_ref]['X'].iloc[0]
@@ -1089,3 +1118,29 @@ def get_unlabeled(df):
 
 def confirm_save():
     return sg.popup_yes_no('Have you saved your work?', title = "Save Before Close")
+
+
+def edit_df(df):
+
+    # open the dataframe in a new window where the user may edit the rows.
+
+    # create a new window
+    layout = [[sg.Table(values=df.values.tolist(),
+                        headings=list(df.columns),
+                        max_col_width=25,
+                        auto_size_columns=True,
+                        justification='right',
+                        alternating_row_color='lightblue',
+                        num_rows=min(25, len(df.index)))]]
+
+    window = sg.Window('Edit Dataframe', layout, grab_anywhere=False, finalize=True)
+
+    # event loop
+    while True:
+        event, values = window.read()
+        if event == sg.WIN_CLOSED:
+            break
+
+    window.close()
+
+    return df
